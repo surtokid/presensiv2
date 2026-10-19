@@ -951,6 +951,7 @@
       const [showCutiLockModal, setShowCutiLockModal] = useState(false);
       const [showSimpleFormModal, setShowSimpleFormModal] = useState(null); 
       const [filterStatusRiwayat, setFilterStatusRiwayat] = useState('Semua');
+      const [cutoffFilter, setCutoffFilter] = useState('Semua');
 
       useEffect(() => {
         const timer = setInterval(() => setClock(new Date()), 1000);
@@ -985,15 +986,53 @@
         return { startDate, endDate, label: `${startDate.getDate()} ${startDate.toLocaleDateString('id-ID', {month: 'short'})} - ${endDate.getDate()} ${endDate.toLocaleDateString('id-ID', {month: 'short', year: 'numeric'})}` };
       }, []);
 
+      const isDateInPayrollCycle = (dateStr) => {
+        if (!dateStr) return false;
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const recordDate = new Date(y, m - 1, d);
+        const s = new Date(payrollCycle.startDate); s.setHours(0, 0, 0, 0);
+        const e = new Date(payrollCycle.endDate); e.setHours(23, 59, 59, 999);
+        return recordDate >= s && recordDate <= e;
+      };
+
+      const periodActivities = useMemo(() => {
+        const userRecords = presensiList.filter(p => p.karyawan_id === currentUser.id && isDateInPayrollCycle(p.tanggal));
+        const uniqueDates = [...new Set(userRecords.map(p => p.tanggal))].sort((a, b) => b.localeCompare(a));
+
+        return uniqueDates.map(date => {
+          const masukRec = userRecords.find(p => p.tanggal === date && p.tipe === 'masuk');
+          const keluarRec = userRecords.find(p => p.tanggal === date && p.tipe === 'keluar');
+          const status = masukRec ? masukRec.status : (keluarRec ? keluarRec.status : 'Hadir');
+          const shift = masukRec?.shift_nama || keluarRec?.shift_nama || 'Reguler';
+          const jamMasuk = masukRec ? masukRec.jam : '-';
+          const jamPulang = keluarRec ? keluarRec.jam : '-';
+
+          return {
+            id: masukRec?.id || keluarRec?.id || date,
+            tanggal: date,
+            status,
+            shift,
+            jamMasuk,
+            jamPulang
+          };
+        });
+      }, [presensiList, currentUser.id, payrollCycle]);
+
+      const filteredPeriodActivities = useMemo(() => {
+        if (cutoffFilter === 'Semua') return periodActivities;
+        if (cutoffFilter === 'Masuk') return periodActivities.filter(a => a.status === 'Hadir' || a.status === 'Terlambat');
+        return periodActivities.filter(a => a.status === cutoffFilter);
+      }, [periodActivities, cutoffFilter]);
+
       const employeeStats = useMemo(() => {
-        const userAttendances = presensiList.filter(p => p.karyawan_id === currentUser.id);
+        const userAttendances = presensiList.filter(p => p.karyawan_id === currentUser.id && isDateInPayrollCycle(p.tanggal));
         const masuk = userAttendances.filter(p => p.tipe === 'masuk' && (p.status === 'Hadir' || p.status === 'Terlambat')).length;
         const libur = userAttendances.filter(p => p.status === 'Libur').length;
         const izin = userAttendances.filter(p => p.status === 'Izin').length;
         const sakit = userAttendances.filter(p => p.status === 'Sakit').length;
         const cuti = userAttendances.filter(p => p.status === 'Cuti').length;
         return { masuk, libur, izin, sakit, cuti };
-      }, [presensiList, currentUser.id]);
+      }, [presensiList, currentUser.id, payrollCycle]);
 
       const todayStr = new Date().toISOString().split('T')[0];
       const todayAttendanceMasuk = presensiList.find(p => p.karyawan_id === currentUser.id && p.tanggal === todayStr && p.tipe === 'masuk');
@@ -1067,7 +1106,7 @@
       };
 
       return (
-        <div className="max-w-md mx-auto min-h-screen bg-white/40 backdrop-blur-3xl flex flex-col pb-28 shadow-2xl relative">
+        <div className="max-w-md mx-auto min-h-screen bg-slate-50/70 flex flex-col pb-28 shadow-2xl relative">
           
           {/* Hero Header Card (Solid Light Color) */}
           <div className="bg-[#fff0f3] text-slate-800 p-6 rounded-b-[2.5rem] border-b border-rose-100 shadow-[0_15px_40px_-15px_rgba(0,0,0,0.05)] relative z-20">
@@ -1325,8 +1364,9 @@
                 </div>
               </div>
 
-              {/* Payroll Cycle Summary (Modern Card) */}
+              {/* Payroll Cycle Summary with In-Place Activity List */}
               <div className="bg-white/90 backdrop-blur-xl rounded-[1.5rem] p-5 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                {/* Header Kartu */}
                 <div className="flex justify-between items-center mb-4">
                   <div>
                     <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-widest font-display">Periode Cut-Off</h3>
@@ -1334,93 +1374,160 @@
                   </div>
                   <button 
                     onClick={() => navigateTo('#riwayat-aktivitas')} 
-                    className="w-8 h-8 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center hover:bg-violet-100 transition"
+                    className="w-8 h-8 rounded-full bg-violet-50 text-violet-600 hover:bg-violet-100 flex items-center justify-center transition active:scale-95"
+                    title="Buka Riwayat Lengkap"
                   >
                     <i className="fa-solid fa-chevron-right text-[10px]"></i>
                   </button>
                 </div>
 
-                <div className="grid grid-cols-5 gap-2 text-center">
-                  <div onClick={() => { setFilterStatusRiwayat('Hadir'); navigateTo('#riwayat-aktivitas'); }} className="cursor-pointer active:scale-95 transition">
-                    <div className="w-full py-1.5 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex flex-col items-center justify-center mb-1 shadow-sm">
+                {/* 5 Tombol Filter Cepat In-Place */}
+                <div className="grid grid-cols-5 gap-2 text-center mb-4">
+                  <div 
+                    onClick={() => setCutoffFilter(prev => prev === 'Masuk' ? 'Semua' : 'Masuk')} 
+                    className="cursor-pointer active:scale-95 transition"
+                  >
+                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${
+                      cutoffFilter === 'Masuk' 
+                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200' 
+                        : 'bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-100/70'
+                    }`}>
                       <span className="font-mono-numbers text-base font-bold">{employeeStats.masuk}</span>
                     </div>
-                    <span className="text-[9px] text-slate-500 font-bold uppercase">Masuk</span>
+                    <span className={`text-[9px] font-bold uppercase ${cutoffFilter === 'Masuk' ? 'text-emerald-700' : 'text-slate-500'}`}>Masuk</span>
                   </div>
-                  <div onClick={() => { setFilterStatusRiwayat('Libur'); navigateTo('#riwayat-aktivitas'); }} className="cursor-pointer active:scale-95 transition">
-                    <div className="w-full py-1.5 rounded-xl bg-sky-50 border border-sky-100 text-sky-600 flex flex-col items-center justify-center mb-1 shadow-sm">
+
+                  <div 
+                    onClick={() => setCutoffFilter(prev => prev === 'Libur' ? 'Semua' : 'Libur')} 
+                    className="cursor-pointer active:scale-95 transition"
+                  >
+                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${
+                      cutoffFilter === 'Libur' 
+                        ? 'bg-sky-600 border-sky-600 text-white shadow-sky-200' 
+                        : 'bg-sky-50 border-sky-100 text-sky-600 hover:bg-sky-100/70'
+                    }`}>
                       <span className="font-mono-numbers text-base font-bold">{employeeStats.libur}</span>
                     </div>
-                    <span className="text-[9px] text-slate-500 font-bold uppercase">Libur</span>
+                    <span className={`text-[9px] font-bold uppercase ${cutoffFilter === 'Libur' ? 'text-sky-700' : 'text-slate-500'}`}>Libur</span>
                   </div>
-                  <div onClick={() => { setFilterStatusRiwayat('Izin'); navigateTo('#riwayat-aktivitas'); }} className="cursor-pointer active:scale-95 transition">
-                    <div className="w-full py-1.5 rounded-xl bg-orange-50 border border-orange-100 text-orange-600 flex flex-col items-center justify-center mb-1 shadow-sm">
+
+                  <div 
+                    onClick={() => setCutoffFilter(prev => prev === 'Izin' ? 'Semua' : 'Izin')} 
+                    className="cursor-pointer active:scale-95 transition"
+                  >
+                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${
+                      cutoffFilter === 'Izin' 
+                        ? 'bg-orange-600 border-orange-600 text-white shadow-orange-200' 
+                        : 'bg-orange-50 border-orange-100 text-orange-600 hover:bg-orange-100/70'
+                    }`}>
                       <span className="font-mono-numbers text-base font-bold">{employeeStats.izin}</span>
                     </div>
-                    <span className="text-[9px] text-slate-500 font-bold uppercase">Izin</span>
+                    <span className={`text-[9px] font-bold uppercase ${cutoffFilter === 'Izin' ? 'text-orange-700' : 'text-slate-500'}`}>Izin</span>
                   </div>
-                  <div onClick={() => { setFilterStatusRiwayat('Sakit'); navigateTo('#riwayat-aktivitas'); }} className="cursor-pointer active:scale-95 transition">
-                    <div className="w-full py-1.5 rounded-xl bg-amber-50 border border-amber-100 text-amber-600 flex flex-col items-center justify-center mb-1 shadow-sm">
+
+                  <div 
+                    onClick={() => setCutoffFilter(prev => prev === 'Sakit' ? 'Semua' : 'Sakit')} 
+                    className="cursor-pointer active:scale-95 transition"
+                  >
+                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${
+                      cutoffFilter === 'Sakit' 
+                        ? 'bg-amber-600 border-amber-600 text-white shadow-amber-200' 
+                        : 'bg-amber-50 border-amber-100 text-amber-600 hover:bg-amber-100/70'
+                    }`}>
                       <span className="font-mono-numbers text-base font-bold">{employeeStats.sakit}</span>
                     </div>
-                    <span className="text-[9px] text-slate-500 font-bold uppercase">Sakit</span>
+                    <span className={`text-[9px] font-bold uppercase ${cutoffFilter === 'Sakit' ? 'text-amber-700' : 'text-slate-500'}`}>Sakit</span>
                   </div>
-                  <div onClick={() => { setFilterStatusRiwayat('Cuti'); navigateTo('#riwayat-aktivitas'); }} className="cursor-pointer active:scale-95 transition">
-                    <div className="w-full py-1.5 rounded-xl bg-purple-50 border border-purple-100 text-purple-600 flex flex-col items-center justify-center mb-1 shadow-sm">
+
+                  <div 
+                    onClick={() => setCutoffFilter(prev => prev === 'Cuti' ? 'Semua' : 'Cuti')} 
+                    className="cursor-pointer active:scale-95 transition"
+                  >
+                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${
+                      cutoffFilter === 'Cuti' 
+                        ? 'bg-purple-600 border-purple-600 text-white shadow-purple-200' 
+                        : 'bg-purple-50 border-purple-100 text-purple-600 hover:bg-purple-100/70'
+                    }`}>
                       <span className="font-mono-numbers text-base font-bold">{employeeStats.cuti}</span>
                     </div>
-                    <span className="text-[9px] text-slate-500 font-bold uppercase">Cuti</span>
+                    <span className={`text-[9px] font-bold uppercase ${cutoffFilter === 'Cuti' ? 'text-purple-700' : 'text-slate-500'}`}>Cuti</span>
                   </div>
+                </div>
+
+                {/* Sub-Header & Status Filter Aktif */}
+                <div className="flex items-center justify-between pt-3 border-t border-slate-100 mb-2.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Aktivitas Periode ({cutoffFilter === 'Semua' ? 'Semua' : cutoffFilter})
+                  </span>
+                  {cutoffFilter !== 'Semua' && (
+                    <button 
+                      onClick={() => setCutoffFilter('Semua')}
+                      className="text-[10px] font-bold text-violet-600 hover:text-violet-800 transition"
+                    >
+                      Reset Filter
+                    </button>
+                  )}
+                </div>
+
+                {/* Daftar Aktivitas Presensi Periode Aktif */}
+                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                  {filteredPeriodActivities.length > 0 ? (
+                    filteredPeriodActivities.map(act => (
+                      <div 
+                        key={act.id} 
+                        className="bg-slate-50/90 hover:bg-slate-50 p-3 rounded-2xl border border-slate-100/80 transition flex flex-col space-y-2"
+                      >
+                        {/* Baris Atas: Tanggal & Badge Status Absen */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-800 font-mono-numbers flex items-center gap-1.5">
+                            <i className="fa-regular fa-calendar text-[10px] text-slate-400"></i>
+                            {formatIndoDate(act.tanggal)}
+                          </span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold ${
+                            act.status === 'Hadir' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                            act.status === 'Terlambat' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                            act.status === 'Libur' ? 'bg-sky-100 text-sky-700 border border-sky-200' :
+                            act.status === 'Izin' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                            act.status === 'Sakit' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                            act.status === 'Cuti' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                            'bg-slate-200 text-slate-700'
+                          }`}>
+                            {act.status}
+                          </span>
+                        </div>
+
+                        {/* Baris Bawah: Shift Kerja, Jam Masuk, dan Jam Pulang */}
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-200/50 text-[10px]">
+                          <div className="text-slate-500 font-semibold truncate pr-2 flex items-center gap-1">
+                            <i className="fa-regular fa-clock text-[9px] text-violet-500"></i>
+                            <span className="truncate max-w-[130px]">{act.shift}</span>
+                          </div>
+                          <div className="flex items-center space-x-2 shrink-0 font-mono-numbers font-bold">
+                            <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100" title="Jam Masuk">
+                              <i className="fa-solid fa-arrow-right-to-bracket text-[8px] mr-1"></i>{act.jamMasuk}
+                            </span>
+                            <span className="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-100" title="Jam Pulang">
+                              <i className="fa-solid fa-arrow-right-from-bracket text-[8px] mr-1"></i>{act.jamPulang}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-6 text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                      <i className="fa-regular fa-calendar-xmark text-xl mb-1 text-slate-300"></i>
+                      <p className="text-[11px] font-medium">Tidak ada aktivitas {cutoffFilter !== 'Semua' ? cutoffFilter : ''} pada periode ini.</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Status Hari Ini Activity */}
-              <div className="bg-white/90 backdrop-blur-xl rounded-[1.5rem] p-5 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">Aktivitas Hari Ini</h3>
-                {todayAttendanceMasuk || todayAttendanceKeluar ? (
-                  <div className="space-y-3">
-                    {todayAttendanceMasuk && (
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-500 flex items-center justify-center">
-                            <i className="fa-solid fa-arrow-right-to-bracket text-sm"></i>
-                          </div>
-                          <div>
-                            <span className="text-xs font-bold text-slate-800">Masuk ({todayAttendanceMasuk.status})</span>
-                            <p className="text-[11px] text-slate-400 font-medium">{todayAttendanceMasuk.lokasi_nama}</p>
-                          </div>
-                        </div>
-                        <span className="font-mono-numbers text-xs font-bold text-slate-700">{todayAttendanceMasuk.jam}</span>
-                      </div>
-                    )}
-                    {todayAttendanceKeluar && (
-                      <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-500 flex items-center justify-center">
-                            <i className="fa-solid fa-arrow-right-from-bracket text-sm"></i>
-                          </div>
-                          <div>
-                            <span className="text-xs font-bold text-slate-800">Keluar ({todayAttendanceKeluar.status})</span>
-                            <p className="text-[11px] text-slate-400 font-medium">{todayAttendanceKeluar.lokasi_nama}</p>
-                          </div>
-                        </div>
-                        <span className="font-mono-numbers text-xs font-bold text-slate-700">{todayAttendanceKeluar.jam}</span>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-slate-400">
-                    <i className="fa-regular fa-clock text-2xl mb-2 text-slate-300"></i>
-                    <p className="text-[11px] font-medium">Belum ada aktivitas presensi hari ini.</p>
-                  </div>
-                )}
-              </div>
             </div>
           )}
 
-          {/* Floating Pill Bottom Navigation (Modern Style) */}
-          <div className="fixed bottom-5 left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)] max-w-sm z-40">
-            <nav className="bg-white/90 backdrop-blur-xl border border-white/50 px-6 py-3 rounded-full flex justify-between items-center shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)]">
+          {/* Floating Pill Bottom Navigation (Always Floating in Viewport) */}
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm z-50 pointer-events-auto">
+            <nav className="bg-white/95 backdrop-blur-2xl border border-slate-200/80 px-6 py-3 rounded-full flex justify-between items-center shadow-[0_12px_35px_rgba(0,0,0,0.12)]">
               <button onClick={() => navigateTo('#karyawan')} className={`flex flex-col items-center space-y-1 transition ${currentRoute === '#karyawan' || currentRoute === '' ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
                 <i className="fa-solid fa-house text-lg"></i>
                 <span className="text-[9px] font-bold">Beranda</span>
@@ -2081,6 +2188,7 @@
       const activePeriod = periods[selectedPeriodIndex];
 
       const isDateInPeriod = (dateStr) => {
+        if (!dateStr) return false;
         const [y, m, d] = dateStr.split('-').map(Number);
         const recordDate = new Date(y, m - 1, d); // Menggunakan local timezone
         const s = new Date(activePeriod.start); s.setHours(0,0,0,0);
@@ -2088,26 +2196,53 @@
         return recordDate >= s && recordDate <= e;
       };
 
+      // Menggabungkan presensi masuk dan keluar per hari persis seperti kartu aktivitas periode
+      const dailyActivities = useMemo(() => {
+        const userPresensi = presensiList.filter(p => p.karyawan_id === currentUser.id && isDateInPeriod(p.tanggal));
+        const uniqueDates = [...new Set(userPresensi.map(p => p.tanggal))].sort((a, b) => b.localeCompare(a));
+
+        return uniqueDates.map(date => {
+          const masukRec = userPresensi.find(p => p.tanggal === date && p.tipe === 'masuk');
+          const keluarRec = userPresensi.find(p => p.tanggal === date && p.tipe === 'keluar');
+          const status = masukRec ? masukRec.status : (keluarRec ? keluarRec.status : 'Hadir');
+          const shift = masukRec?.shift_nama || keluarRec?.shift_nama || 'Reguler';
+          const jamMasuk = masukRec ? masukRec.jam : '-';
+          const jamPulang = keluarRec ? keluarRec.jam : '-';
+
+          return {
+            id: masukRec?.id || keluarRec?.id || date,
+            tanggal: date,
+            status,
+            shift,
+            jamMasuk,
+            jamPulang
+          };
+        });
+      }, [presensiList, currentUser.id, activePeriod]);
+
+      // Filter daftar lembur pada periode aktif
+      const periodLemburList = useMemo(() => {
+        return lemburList.filter(l => l.karyawan_id === currentUser.id && isDateInPeriod(l.tanggal));
+      }, [lemburList, currentUser.id, activePeriod]);
+
       // Hitung jumlah riwayat per status dalam periode aktif
       const counts = useMemo(() => {
-        const userPresensi = presensiList.filter(p => p.karyawan_id === currentUser.id && isDateInPeriod(p.tanggal));
-        const userLembur = lemburList.filter(l => l.karyawan_id === currentUser.id && isDateInPeriod(l.tanggal));
-
         return {
-          'Semua': userPresensi.length,
-          'Hadir': userPresensi.filter(p => p.status === 'Hadir').length,
-          'Terlambat': userPresensi.filter(p => p.status === 'Terlambat').length,
-          'Libur': userPresensi.filter(p => p.status === 'Libur').length,
-          'Izin': userPresensi.filter(p => p.status === 'Izin').length,
-          'Sakit': userPresensi.filter(p => p.status === 'Sakit').length,
-          'Cuti': userPresensi.filter(p => p.status === 'Cuti').length,
-          'Lembur': userLembur.length
+          'Semua': dailyActivities.length,
+          'Hadir': dailyActivities.filter(p => p.status === 'Hadir').length,
+          'Terlambat': dailyActivities.filter(p => p.status === 'Terlambat').length,
+          'Libur': dailyActivities.filter(p => p.status === 'Libur').length,
+          'Izin': dailyActivities.filter(p => p.status === 'Izin').length,
+          'Sakit': dailyActivities.filter(p => p.status === 'Sakit').length,
+          'Cuti': dailyActivities.filter(p => p.status === 'Cuti').length,
+          'Lembur': periodLemburList.length
         };
-      }, [presensiList, lemburList, currentUser.id, activePeriod]);
+      }, [dailyActivities, periodLemburList]);
 
-      const filtered = filterStatus === 'Lembur' 
-        ? lemburList.filter(l => l.karyawan_id === currentUser.id && isDateInPeriod(l.tanggal))
-        : (filterStatus === 'Semua' ? presensiList.filter(p => p.karyawan_id === currentUser.id && isDateInPeriod(p.tanggal)) : presensiList.filter(p => p.karyawan_id === currentUser.id && p.status === filterStatus && isDateInPeriod(p.tanggal)));
+      const filteredActivities = useMemo(() => {
+        if (filterStatus === 'Semua') return dailyActivities;
+        return dailyActivities.filter(a => a.status === filterStatus);
+      }, [dailyActivities, filterStatus]);
 
       return (
         <div className="p-5 space-y-4 pb-28">
@@ -2143,43 +2278,96 @@
           </div>
 
           <div className="space-y-3">
-            {filtered.length > 0 ? filtered.map(r => (
-              <div key={r.id} className="bg-white/90 backdrop-blur-xl p-4 rounded-3xl border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] flex items-center justify-between">
-                {filterStatus === 'Lembur' ? (
-                  <div className="flex items-center space-x-3 w-full">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-indigo-50 text-indigo-500 shrink-0">
-                      <i className="fa-solid fa-business-time"></i>
+            {filterStatus === 'Lembur' ? (
+              periodLemburList.length > 0 ? (
+                periodLemburList.map(r => (
+                  <div 
+                    key={r.id} 
+                    className="bg-white/95 hover:bg-white p-3.5 rounded-2xl border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] transition flex flex-col space-y-2.5"
+                  >
+                    {/* Baris Atas: Tanggal & Badge Status Lembur */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-800 font-mono-numbers flex items-center gap-1.5">
+                        <i className="fa-regular fa-calendar text-[10px] text-slate-400"></i>
+                        {formatIndoDate(r.tanggal)}
+                      </span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold ${
+                        r.status === 'Approved' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                        r.status === 'Rejected' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
+                        'bg-amber-100 text-amber-700 border border-amber-200'
+                      }`}>
+                        {r.status === 'Approved' ? 'Disetujui' : r.status === 'Rejected' ? 'Ditolak' : 'Pending'}
+                      </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[11px] font-bold text-slate-800 uppercase">Lembur {r.durasi_jam} Jam</span>
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-50 text-slate-500">{r.status}</span>
+
+                    {/* Baris Bawah: Keterangan Tugas & Durasi Lembur */}
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px]">
+                      <div className="text-slate-500 font-semibold truncate pr-2 flex items-center gap-1">
+                        <i className="fa-solid fa-briefcase text-[9px] text-indigo-500"></i>
+                        <span className="truncate max-w-[170px]">{r.keterangan || 'Pengajuan Lembur'}</span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] text-slate-400 font-medium truncate pr-2">{r.keterangan}</p>
-                        <span className="text-[9px] text-slate-400 font-medium shrink-0">{r.tanggal}</span>
+                      <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 font-mono-numbers font-bold shrink-0">
+                        <i className="fa-solid fa-business-time text-[8px] mr-1"></i>{r.durasi_jam} Jam
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-10 text-slate-400 bg-white/50 rounded-2xl border border-dashed border-slate-200">
+                  <i className="fa-regular fa-calendar-xmark text-xl mb-1 text-slate-300"></i>
+                  <p className="text-xs font-medium">Tidak ada catatan Lembur pada periode ini</p>
+                </div>
+              )
+            ) : (
+              filteredActivities.length > 0 ? (
+                filteredActivities.map(act => (
+                  <div 
+                    key={act.id} 
+                    className="bg-white/95 hover:bg-white p-3.5 rounded-2xl border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] transition flex flex-col space-y-2.5"
+                  >
+                    {/* Baris Atas: Tanggal & Badge Status Absen */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-800 font-mono-numbers flex items-center gap-1.5">
+                        <i className="fa-regular fa-calendar text-[10px] text-slate-400"></i>
+                        {formatIndoDate(act.tanggal)}
+                      </span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold ${
+                        act.status === 'Hadir' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                        act.status === 'Terlambat' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                        act.status === 'Libur' ? 'bg-sky-100 text-sky-700 border border-sky-200' :
+                        act.status === 'Izin' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                        act.status === 'Sakit' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                        act.status === 'Cuti' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                        'bg-slate-200 text-slate-700'
+                      }`}>
+                        {act.status}
+                      </span>
+                    </div>
+
+                    {/* Baris Bawah: Shift Kerja, Jam Masuk, dan Jam Pulang */}
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px]">
+                      <div className="text-slate-500 font-semibold truncate pr-2 flex items-center gap-1">
+                        <i className="fa-regular fa-clock text-[9px] text-violet-500"></i>
+                        <span className="truncate max-w-[140px]">{act.shift}</span>
+                      </div>
+                      <div className="flex items-center space-x-2 shrink-0 font-mono-numbers font-bold">
+                        <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100" title="Jam Masuk">
+                          <i className="fa-solid fa-arrow-right-to-bracket text-[8px] mr-1"></i>{act.jamMasuk}
+                        </span>
+                        <span className="text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100" title="Jam Pulang">
+                          <i className="fa-solid fa-arrow-right-from-bracket text-[8px] mr-1"></i>{act.jamPulang}
+                        </span>
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${r.tipe === 'masuk' ? 'bg-emerald-50 text-emerald-500' : 'bg-rose-50 text-rose-500'}`}>
-                        <i className={`fa-solid ${r.tipe === 'masuk' ? 'fa-arrow-right-to-bracket' : 'fa-arrow-right-from-bracket'}`}></i>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2"><span className="text-[11px] font-bold text-slate-800 uppercase">{r.tipe}</span><span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-50 text-slate-500">{r.status}</span></div>
-                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">{r.lokasi_nama}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-mono-numbers text-xs font-bold text-slate-800 block">{r.jam}</span>
-                      <span className="text-[9px] text-slate-400 font-medium">{r.tanggal}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            )) : <div className="text-center py-10 text-slate-400"><p className="text-xs font-medium">Tidak ada catatan {filterStatus} pada periode ini</p></div>}
+                ))
+              ) : (
+                <div className="text-center py-10 text-slate-400 bg-white/50 rounded-2xl border border-dashed border-slate-200">
+                  <i className="fa-regular fa-calendar-xmark text-xl mb-1 text-slate-300"></i>
+                  <p className="text-xs font-medium">Tidak ada catatan {filterStatus} pada periode ini</p>
+                </div>
+              )
+            )}
           </div>
         </div>
       );
