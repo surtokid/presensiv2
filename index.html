@@ -50,8 +50,6 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <!-- Supabase UMD: dua sumber parser-blocking agar client tersedia sebelum Babel menjalankan aplikasi. -->
-  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
   <style>
@@ -105,81 +103,34 @@
     const { useState, useEffect, useRef, useMemo } = React;
 
     // Supabase & Google Drive via Google Apps Script (GAS) Configuration
-    const SUPABASE_URL = "https://hxpoajftzysfsxgjcgex.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4cG9hamZ0enlzZnN4Z2pjZ2V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MDA1OTUsImV4cCI6MjEwNzk3NjU5NX0.2_LNfRj9B54uINQNMO4zecN3no8B6mYl07fNJ0mYHqM";
+    const SUPABASE_URL = "https://zzpzvjmftcmlcjnjjhop.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6cHp2am1mdGNtbGNqbmpqaG9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0Mzk1ODcsImV4cCI6MjEwODAxNTU4N30.6hvHxWgZCbWgZM9qLdAnrTAE-ZyOqTEiuxrdTaXtpi0";
     const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz2XNXvOnw-bL9SVKhcgJvKuYiRYJtLMqoNLeGSesIUss_s2rv6c83TO-ZB0QsP5J70OA/exec";
     const GOOGLE_DRIVE_FOLDER_ID = "10QkIZG7iJbdcHwRTyKZt1EKlqADJ8V36";
 
-    // Bersihkan sesi demo lama dari versi sebelumnya; tidak menghapus data database.
-    try {
-      const cachedUser = JSON.parse(localStorage.getItem('suryatokoku_user') || 'null');
-      const cachedId = String(cachedUser?.id || '');
-      if (['kry-001', 'kry-002', 'kry-003', 'adm-01', 'adm-02'].includes(cachedId)) {
-        localStorage.removeItem('suryatokoku_user');
-        localStorage.removeItem('suryatokoku_session');
-        localStorage.removeItem('suryatokoku_is_admin');
-      }
-    } catch (_) {
-      localStorage.removeItem('suryatokoku_user');
-      localStorage.removeItem('suryatokoku_session');
-      localStorage.removeItem('suryatokoku_is_admin');
-    }
+    
+let supabase = null;
 
-    let supabase = null;
-    try {
-      // UMD build menempatkan createClient pada window.supabase.
-      const supabaseLibrary = window.supabase;
-      if (supabaseLibrary && typeof supabaseLibrary.createClient === 'function') {
-        supabase = supabaseLibrary.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        console.info('[Supabase] Client berhasil dibuat untuk project:', new URL(SUPABASE_URL).host);
-      } else {
-        console.error('[Supabase] Library tidak ditemukan. Periksa Network/Console dan pastikan CDN tidak diblokir ekstensi, firewall, atau CSP.', {
-          windowSupabaseType: typeof window.supabase,
-          url: SUPABASE_URL
-        });
-      }
-    } catch(e) {
-      console.error('[Supabase] Gagal membuat client:', e);
-      supabase = null;
-    }
-    if (!supabase) {
-      console.error('[Supabase] Client belum tersedia. Coba buka aplikasi tanpa ad blocker atau jaringan yang memblokir CDN.');
-    }
+try {
+  if (
+    window.supabase &&
+    typeof window.supabase.createClient === "function"
+  ) {
+    supabase = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY
+    );
 
-    // Helper mutasi database: UI hanya diubah setelah Supabase mengonfirmasi sukses.
-    const requireSupabase = () => {
-      if (!supabase) throw new Error('Koneksi Supabase belum tersedia. Periksa koneksi dan konfigurasi aplikasi.');
-      return supabase;
-    };
-    const dbInsert = async (table, record) => {
-      const { data, error } = await requireSupabase().from(table).insert(record).select();
-      if (error) throw error;
-      if (!data || data.length === 0) throw new Error('Supabase tidak mengembalikan data setelah insert. Periksa izin RLS.');
-      return data;
-    };
-    const dbUpdate = async (table, id, changes) => {
-      const { data, error } = await requireSupabase().from(table).update(changes).eq('id', id).select();
-      if (error) throw error;
-      if (!data || data.length === 0) throw new Error('Data tidak diperbarui. ID tidak ditemukan atau operasi dibatasi izin RLS.');
-      return data[0];
-    };
-    const dbDelete = async (table, id) => {
-      const { data, error } = await requireSupabase().from(table).delete().eq('id', id).select('id');
-      if (error) throw error;
-      if (!data || data.length === 0) throw new Error('Tidak ada data yang terhapus. ID tidak ditemukan atau operasi dibatasi izin RLS.');
-      return data;
-    };
-    const dbUpsert = async (table, records) => {
-      if (!records || records.length === 0) return [];
-      const { data, error } = await requireSupabase().from(table).upsert(records).select();
-      if (error) throw error;
-      if (!data || data.length === 0) throw new Error('Supabase tidak mengonfirmasi penyimpanan. Periksa primary key/unique constraint dan izin RLS.');
-      return data;
-    };
-    const showDbError = (showToast, action, error) => {
-      console.error(action, error);
-      showToast(`${action}: ${error?.message || 'Terjadi kesalahan database.'}`, 'error');
-    };
+    console.info("Supabase client berhasil diinisialisasi.");
+  } else {
+    console.error(
+      "Supabase SDK belum termuat. Periksa script CDN di bagian head."
+    );
+  }
+} catch (error) {
+  console.error("Inisialisasi Supabase gagal:", error);
+}
+
 
     // Fungsi Pengunggah Media ke Google Drive melalui Google Apps Script Web App
     const uploadToGoogleDriveViaGAS = async (base64Image, fileName = '', subFolder = 'presensi') => {
@@ -282,154 +233,103 @@
       });
     }
 
-    // Data aplikasi hanya dimuat dari Supabase; tidak ada seed/dummy data lokal.
-
     function App() {
       const [currentRoute, setCurrentRoute] = useState(window.location.hash || '#karyawan');
     
-    // Auth Session State
-    const [authSession, setAuthSession] = useState(() => {
-      const saved = localStorage.getItem('suryatokoku_session');
-      return saved ? JSON.parse(saved) : null;
-    });
+      // Auth Session State
+      const [authSession, setAuthSession] = useState(() => {
+        const saved = localStorage.getItem('suryatokoku_session');
+        return saved ? JSON.parse(saved) : null;
+      });
 
-    const [currentUser, setCurrentUser] = useState(() => {
-      const savedUser = localStorage.getItem('suryatokoku_user');
-      if (savedUser) return JSON.parse(savedUser);
-      return null;
-    });
+      const [currentUser, setCurrentUser] = useState(() => {
+        const savedUser = localStorage.getItem('suryatokoku_user');
+        if (savedUser) return JSON.parse(savedUser);
+        return null;
+      });
 
-    const [isAdmin, setIsAdmin] = useState(() => {
-      return localStorage.getItem('suryatokoku_is_admin') === 'true';
-    });
+      const [isAdmin, setIsAdmin] = useState(() => {
+        return localStorage.getItem('suryatokoku_is_admin') === 'true';
+      });
 
-    const [karyawanList, setKaryawanList] = useState([]);
-    const [lokasiList, setLokasiList] = useState([]);
-    const [divisiList, setDivisiList] = useState([]);
-    const [jabatanList, setJabatanList] = useState([]);
-    const [shiftList, setShiftList] = useState([]);
-    const [pengumumanList, setPengumumanList] = useState([]);
-    const [adminList, setAdminList] = useState([]);
-    const [toleransiMenit, setToleransiMenit] = useState(15);
-      
-    const [presensiList, setPresensiList] = useState([]);
-    const [lemburList, setLemburList] = useState([]);
-    const [klaimList, setKlaimList] = useState([]);
-    const [toast, setToast] = useState(null);
-    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-    const [isLoadingData, setIsLoadingData] = useState(false);
+      // State murni dari Supabase (tanpa data dummy)
+      const [karyawanList, setKaryawanList] = useState([]);
+      const [lokasiList, setLokasiList] = useState([]);
+      const [divisiList, setDivisiList] = useState([]);
+      const [jabatanList, setJabatanList] = useState([]);
+      const [shiftList, setShiftList] = useState([]);
+      const [pengumumanList, setPengumumanList] = useState([]);
+      const [adminList, setAdminList] = useState([]);
+      const [toleransiMenit, setToleransiMenit] = useState(15);
+        
+      const [presensiList, setPresensiList] = useState([]);
+      const [lemburList, setLemburList] = useState([]);
+      const [klaimList, setKlaimList] = useState([]);
+      const [toast, setToast] = useState(null);
+      const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+      const [isLoadingData, setIsLoadingData] = useState(false);
 
-    // Sinkronisasi data awal dari Supabase
-    useEffect(() => {
-      if (!supabase) {
-        showToast('Library Supabase belum termuat. Muat ulang halaman; jika berlanjut, periksa Console dan pemblokiran CDN.', 'error');
-        return;
-      }
+      // Sinkronisasi data langsung dari Supabase
+      useEffect(() => {
+        if (!supabase) return;
 
-      const fetchAllFromSupabase = async () => {
-        setIsLoadingData(true);
-        const loadErrors = [];
-        try {
-          // 1. Master Karyawan
-          const { data: kryData, error: kryErr } = await supabase.from('master_karyawan').select('*');
-          if (!kryErr) {
-            setKaryawanList(kryData ?? []);
-          } else {
-            console.error('Gagal memuat master_karyawan:', kryErr); loadErrors.push('master_karyawan: ' + (kryErr?.message || 'error tidak diketahui'));
+        const fetchAllFromSupabase = async () => {
+          setIsLoadingData(true);
+          try {
+            // 1. Master Karyawan
+            const { data: kryData, error: kryErr } = await supabase.from('master_karyawan').select('*');
+            if (!kryErr && kryData) setKaryawanList(kryData);
+
+            // 2. Master Lokasi
+            const { data: lokData, error: lokErr } = await supabase.from('master_lokasi').select('*');
+            if (!lokErr && lokData) setLokasiList(lokData);
+
+            // 3. Master Divisi
+            const { data: divData, error: divErr } = await supabase.from('master_divisi').select('*');
+            if (!divErr && divData) setDivisiList(divData);
+
+            // 4. Master Jabatan
+            const { data: jabData, error: jabErr } = await supabase.from('master_jabatan').select('*');
+            if (!jabErr && jabData) setJabatanList(jabData);
+
+            // 5. Master Shift
+            const { data: shData, error: shErr } = await supabase.from('master_shift').select('*');
+            if (!shErr && shData) setShiftList(shData);
+
+            // 6. Master Admin
+            const { data: admData, error: admErr } = await supabase.from('master_admin').select('*');
+            if (!admErr && admData) setAdminList(admData);
+
+            // 7. Pengumuman
+            const { data: pgmData, error: pgmErr } = await supabase.from('pengumuman').select('*').order('created_at', { ascending: false });
+            if (!pgmErr && pgmData) setPengumumanList(pgmData);
+
+            // 8. Presensi Transaksi
+            const { data: prsData, error: prsErr } = await supabase.from('presensi').select('*').order('created_at', { ascending: false });
+            if (!prsErr && prsData) setPresensiList(prsData);
+
+            // 9. Pengajuan Lembur
+            const { data: lmbData, error: lmbErr } = await supabase.from('pengajuan_lembur').select('*').order('created_at', { ascending: false });
+            if (!lmbErr && lmbData) setLemburList(lmbData);
+
+            // 10. Klaim Kehadiran
+            const { data: klmData, error: klmErr } = await supabase.from('klaim_kehadiran').select('*');
+            if (!klmErr && klmData) setKlaimList(klmData);
+
+            // 11. Pengaturan Toleransi
+            const { data: setToleransi } = await supabase.from('settings').select('value').eq('key', 'toleransi_menit').single();
+            if (setToleransi && setToleransi.value) {
+              setToleransiMenit(Number(setToleransi.value));
+            }
+          } catch (err) {
+            console.warn("Gagal memuat data dari Supabase:", err);
+          } finally {
+            setIsLoadingData(false);
           }
+        };
 
-          // 2. Master Lokasi
-          const { data: lokData, error: lokErr } = await supabase.from('master_lokasi').select('*');
-          if (!lokErr) {
-            setLokasiList(lokData ?? []);
-          } else {
-            console.error('Gagal memuat master_lokasi:', lokErr); loadErrors.push('master_lokasi: ' + (lokErr?.message || 'error tidak diketahui'));
-          }
-
-          // 3. Master Divisi
-          const { data: divData, error: divErr } = await supabase.from('master_divisi').select('*');
-          if (!divErr) {
-            setDivisiList(divData ?? []);
-          } else {
-            console.error('Gagal memuat master_divisi:', divErr); loadErrors.push('master_divisi: ' + (divErr?.message || 'error tidak diketahui'));
-          }
-
-          // 4. Master Jabatan
-          const { data: jabData, error: jabErr } = await supabase.from('master_jabatan').select('*');
-          if (!jabErr) {
-            setJabatanList(jabData ?? []);
-          } else {
-            console.error('Gagal memuat master_jabatan:', jabErr); loadErrors.push('master_jabatan: ' + (jabErr?.message || 'error tidak diketahui'));
-          }
-
-          // 5. Master Shift
-          const { data: shData, error: shErr } = await supabase.from('master_shift').select('*');
-          if (!shErr) {
-            setShiftList(shData ?? []);
-          } else {
-            console.error('Gagal memuat master_shift:', shErr); loadErrors.push('master_shift: ' + (shErr?.message || 'error tidak diketahui'));
-          }
-
-          // 6. Master Admin
-          const { data: admData, error: admErr } = await supabase.from('master_admin').select('*');
-          if (!admErr) {
-            setAdminList(admData ?? []);
-          } else {
-            console.error('Gagal memuat master_admin:', admErr); loadErrors.push('master_admin: ' + (admErr?.message || 'error tidak diketahui'));
-          }
-
-          // 7. Pengumuman
-          const { data: pgmData, error: pgmErr } = await supabase.from('pengumuman').select('*').order('created_at', { ascending: false });
-          if (!pgmErr) {
-            setPengumumanList(pgmData ?? []);
-          } else {
-            console.error('Gagal memuat pengumuman:', pgmErr); loadErrors.push('pengumuman: ' + (pgmErr?.message || 'error tidak diketahui'));
-          }
-
-          // 8. Presensi Transaksi
-          const { data: prsData, error: prsErr } = await supabase.from('presensi').select('*').order('created_at', { ascending: false });
-          if (!prsErr) {
-            setPresensiList(prsData ?? []);
-          } else {
-            console.error('Gagal memuat presensi:', prsErr); loadErrors.push('presensi: ' + (prsErr?.message || 'error tidak diketahui'));
-          }
-
-          // 9. Pengajuan Lembur
-          const { data: lmbData, error: lmbErr } = await supabase.from('pengajuan_lembur').select('*').order('created_at', { ascending: false });
-          if (!lmbErr) {
-            setLemburList(lmbData ?? []);
-          } else {
-            console.error('Gagal memuat pengajuan_lembur:', lmbErr); loadErrors.push('pengajuan_lembur: ' + (lmbErr?.message || 'error tidak diketahui'));
-          }
-
-          // 10. Klaim Kehadiran
-          const { data: klmData, error: klmErr } = await supabase.from('klaim_kehadiran').select('*');
-          if (!klmErr) {
-            setKlaimList(klmData ?? []);
-          } else {
-            console.error('Gagal memuat klaim_kehadiran:', klmErr); loadErrors.push('klaim_kehadiran: ' + (klmErr?.message || 'error tidak diketahui'));
-          }
-
-          // 11. Pengaturan Toleransi
-          const { data: setToleransi, error: setErr } = await supabase.from('settings').select('value').eq('key', 'toleransi_menit').single();
-          if (!setErr && setToleransi && setToleransi.value !== null && setToleransi.value !== undefined) {
-            setToleransiMenit(Number(setToleransi.value));
-          } else if (setErr && setErr.code !== 'PGRST116') {
-            console.error('Gagal memuat settings:', setErr); loadErrors.push('settings: ' + (setErr?.message || 'error tidak diketahui'));
-          }
-          if (loadErrors.length) {
-            console.error('Sebagian tabel gagal dimuat dari Supabase:', loadErrors);
-            showToast('Sebagian tabel gagal dimuat. Buka F12 > Console untuk melihat tabel dan pesan error.', 'error');
-          }
-        } catch (err) {
-          console.warn("Gagal memuat data dari Supabase:", err);
-        } finally {
-          setIsLoadingData(false);
-        }
-      };
-
-      fetchAllFromSupabase();
-    }, []);
+        fetchAllFromSupabase();
+      }, []);
 
     const showToast = (message, type = 'success') => {
       setToast({ message, type, id: Date.now() });
@@ -455,9 +355,9 @@
     const handleLoginKaryawan = (identifier, password) => {
       const trimmedId = identifier.trim().toLowerCase();
       const user = karyawanList.find(k => 
-        ((k.username || '').toLowerCase() === trimmedId || 
-         (k.no_wa || '') === trimmedId || 
-         (k.email || '').toLowerCase() === trimmedId) && 
+        (k.username.toLowerCase() === trimmedId || 
+         k.no_wa === trimmedId || 
+         k.email.toLowerCase() === trimmedId) && 
         k.password === password
       );
 
@@ -480,7 +380,7 @@
     const handleLoginAdmin = (identifier, password) => {
       const trimmedId = identifier.trim().toLowerCase();
       const admin = adminList.find(a => 
-        ((a.username || '').toLowerCase() === trimmedId || (a.email || '').toLowerCase() === trimmedId) && 
+        (a.username.toLowerCase() === trimmedId || a.email.toLowerCase() === trimmedId) && 
         a.password === password
       );
 
@@ -755,6 +655,12 @@
       }, 500);
     };
 
+    // Quick Login Demo Helper
+    const applyDummyCredential = (user) => {
+      setIdentifier(user.username);
+      setPassword(user.password);
+      showToast(`Kredensial ${user.nama_lengkap} disiapkan. Silakan klik Masuk.`, 'info');
+    };
 
     return (
       <div className="min-h-[calc(100vh-60px)] flex items-center justify-center p-4 sm:p-6 relative z-10">
@@ -790,7 +696,7 @@
                 <input 
                   type="text" 
                   required
-                  placeholder={loginRole === 'karyawan' ? 'Masukkan username, No. WhatsApp, atau email' : 'Masukkan username atau email admin'}
+                  placeholder={loginRole === 'karyawan' ? "budi atau 081234567890" : "admin atau hrd@suryatokoku.com"}
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl pl-10 pr-4 py-3.5 font-bold text-slate-700 outline-none focus:border-violet-500 focus:bg-white transition"
@@ -801,7 +707,9 @@
             <div>
               <div className="flex justify-between items-center mb-1.5 ml-1">
                 <label className="text-[11px] font-bold text-slate-500">Kata Sandi</label>
-                <span className="text-[10px] text-slate-400 font-semibold">Hubungi administrator jika lupa sandi</span>
+                <span className="text-[10px] text-violet-600 font-semibold cursor-pointer" onClick={() => showToast('Gunakan password demo: 123', 'info')}>
+                  Lupa Sandi?
+                </span>
               </div>
               <div className="relative">
                 <i className="fa-solid fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -977,58 +885,60 @@
         setShowSimpleFormModal(type);
       };
 
-      const handleYesterdayConfirm = async (status, note) => {
+      const handleYesterdayConfirm = (status, note) => {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yStr = yesterday.toISOString().split('T')[0];
+        
         const newRecord = {
-          id: 'prs-' + Date.now(), karyawan_id: currentUser.id,
-          karyawan_nama: currentUser.nama_lengkap, divisi: currentUser.divisi,
-          tipe: 'masuk', status, shift_nama: 'Konfirmasi Mandiri',
-          lokasi_nama: 'Dikonfirmasi Kemarin', latitude: 0, longitude: 0,
-          foto_url: '', keterangan: note || 'Konfirmasi presensi kemarin',
-          tanggal: yStr, jam: '08:00:00', created_at: new Date().toISOString()
+          id: 'prs-' + Date.now(),
+          karyawan_id: currentUser.id,
+          karyawan_nama: currentUser.nama_lengkap,
+          divisi: currentUser.divisi,
+          tipe: 'masuk',
+          status: status,
+          shift_nama: 'Konfirmasi Mandiri',
+          lokasi_nama: 'Dikonfirmasi Kemarin',
+          latitude: 0,
+          longitude: 0,
+          foto_url: '',
+          keterangan: note || 'Konfirmasi presensi kemarin',
+          tanggal: yStr,
+          jam: '08:00:00',
+          created_at: new Date().toISOString()
         };
-        try {
-          await dbInsert('presensi', newRecord);
-          setPresensiList(prev => [newRecord, ...prev]);
-          let updatedUser = currentUser;
-          if (status === 'Libur' && currentUser.sisa_libur > 0) {
-            updatedUser = { ...currentUser, sisa_libur: currentUser.sisa_libur - 1 };
-            try { await dbUpdate('master_karyawan', currentUser.id, { sisa_libur: updatedUser.sisa_libur }); }
-            catch (balanceErr) { showDbError(showToast, 'Presensi tersimpan, tetapi sisa libur gagal diperbarui', balanceErr); }
-          } else if (status === 'Cuti' && currentUser.sisa_cuti > 0) {
-            updatedUser = { ...currentUser, sisa_cuti: currentUser.sisa_cuti - 1 };
-            try { await dbUpdate('master_karyawan', currentUser.id, { sisa_cuti: updatedUser.sisa_cuti }); }
-            catch (balanceErr) { showDbError(showToast, 'Presensi tersimpan, tetapi sisa cuti gagal diperbarui', balanceErr); }
-          }
-          if (updatedUser !== currentUser) setCurrentUser(updatedUser);
-          setShowYesterdayCheck(false);
-          showToast(`Presensi kemarin dicatat sebagai ${status}!`);
-        } catch (err) {
-          showDbError(showToast, 'Gagal menyimpan konfirmasi presensi kemarin', err);
+
+        setPresensiList([newRecord, ...presensiList]);
+        
+        if (status === 'Libur' && currentUser.sisa_libur > 0) {
+          setCurrentUser({...currentUser, sisa_libur: currentUser.sisa_libur - 1});
+        } else if (status === 'Cuti' && currentUser.sisa_cuti > 0) {
+          setCurrentUser({...currentUser, sisa_cuti: currentUser.sisa_cuti - 1});
         }
+        
+        setShowYesterdayCheck(false);
+        showToast(`Presensi kemarin dicatat sebagai ${status}!`);
       };
 
-      const handleYesterdayClaimHR = async () => {
+      const handleYesterdayClaimHR = () => {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yStr = yesterday.toISOString().split('T')[0];
+        
         const claim = {
-          id: 'klm-' + Date.now(), karyawan_id: currentUser.id,
-          karyawan_nama: currentUser.nama_lengkap, divisi: currentUser.divisi,
-          tanggal_klaim: yStr, status: 'Pending',
+          id: 'klm-' + Date.now(),
+          karyawan_id: currentUser.id,
+          karyawan_nama: currentUser.nama_lengkap,
+          divisi: currentUser.divisi,
+          tanggal_klaim: yStr,
+          status: 'Pending',
           catatan: 'Karyawan mengklaim hadir kemarin namun belum tercatat. Menunggu verifikasi HR.',
           created_at: new Date().toISOString()
         };
-        try {
-          await dbInsert('klaim_kehadiran', claim);
-          setKlaimList(prev => [claim, ...prev]);
-          setShowYesterdayCheck(false);
-          showToast('Tiket klaim kehadiran dikirimkan ke HRD!');
-        } catch (err) {
-          showDbError(showToast, 'Gagal mengirim klaim kehadiran', err);
-        }
+
+        setKlaimList([claim, ...klaimList]);
+        setShowYesterdayCheck(false);
+        showToast('Tiket klaim kehadiran dikirimkan ke HRD!');
       };
 
       return (
@@ -1842,15 +1752,17 @@
           created_at: now.toISOString()
         };
 
-        try {
-          await dbInsert('presensi', newRecord);
-          setIsUploading(false);
-          onSuccess(newRecord);
-        } catch (err) {
-          console.error("Gagal simpan presensi ke Supabase:", err);
-          setIsUploading(false);
-          alert(`Presensi gagal disimpan ke database: ${err?.message || 'Kesalahan tidak diketahui'}`);
+        // Simpan ke Supabase jika terhubung
+        if (supabase) {
+          try {
+            await supabase.from('presensi').insert([newRecord]);
+          } catch (err) {
+            console.warn("Gagal simpan presensi ke Supabase:", err);
+          }
         }
+
+        setIsUploading(false);
+        onSuccess(newRecord);
       };
 
       return (
@@ -2122,15 +2034,16 @@
             created_at: now.toISOString()
           };
 
-          try {
-            await dbInsert('pengajuan_lembur', newLembur);
-            setIsSubmitting(false);
-            onSubmitLembur(newLembur);
-          } catch (err) {
-            console.error("Gagal simpan lembur ke Supabase:", err);
-            setIsSubmitting(false);
-            alert(`Pengajuan lembur gagal disimpan: ${err?.message || 'Kesalahan database'}`);
+          if (supabase) {
+            try {
+              await supabase.from('pengajuan_lembur').insert([newLembur]);
+            } catch (err) {
+              console.warn("Gagal simpan lembur ke Supabase:", err);
+            }
           }
+
+          setIsSubmitting(false);
+          onSubmitLembur(newLembur);
           return;
         }
 
@@ -2153,24 +2066,26 @@
           created_at: now.toISOString()
         };
 
-        try {
-          await dbInsert('presensi', newAttendance);
-          let updatedUser = currentUser;
-          if (type === 'libur' && currentUser.sisa_libur > 0) {
-            updatedUser = { ...currentUser, sisa_libur: currentUser.sisa_libur - 1 };
-            await dbUpdate('master_karyawan', currentUser.id, { sisa_libur: updatedUser.sisa_libur });
-          } else if (type === 'cuti' && currentUser.sisa_cuti > 0) {
-            updatedUser = { ...currentUser, sisa_cuti: currentUser.sisa_cuti - 1 };
-            await dbUpdate('master_karyawan', currentUser.id, { sisa_cuti: updatedUser.sisa_cuti });
+        if (supabase) {
+          try {
+            await supabase.from('presensi').insert([newAttendance]);
+          } catch (err) {
+            console.warn("Gagal simpan absensi form ke Supabase:", err);
           }
-          if (updatedUser !== currentUser) setCurrentUser(updatedUser);
-          setIsSubmitting(false);
-          onSubmitAttendance(newAttendance);
-        } catch (err) {
-          console.error("Gagal menyimpan pengajuan ke Supabase:", err);
-          setIsSubmitting(false);
-          alert(`Pengajuan gagal disimpan: ${err?.message || 'Kesalahan database'}`);
         }
+
+        if (type === 'libur' && currentUser.sisa_libur > 0) {
+          const updatedUser = { ...currentUser, sisa_libur: currentUser.sisa_libur - 1 };
+          setCurrentUser(updatedUser);
+          if (supabase) supabase.from('master_karyawan').update({ sisa_libur: updatedUser.sisa_libur }).eq('id', currentUser.id);
+        } else if (type === 'cuti' && currentUser.sisa_cuti > 0) {
+          const updatedUser = { ...currentUser, sisa_cuti: currentUser.sisa_cuti - 1 };
+          setCurrentUser(updatedUser);
+          if (supabase) supabase.from('master_karyawan').update({ sisa_cuti: updatedUser.sisa_cuti }).eq('id', currentUser.id);
+        }
+
+        setIsSubmitting(false);
+        onSubmitAttendance(newAttendance);
       };
 
       return (
@@ -2668,27 +2583,6 @@
     }
 
     function ProfilKaryawanView({ currentUser, setCurrentUser, showToast, handleLogout }) {
-      const handlePhotoChange = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        if (!file.type.startsWith('image/')) { showToast('File harus berupa gambar.', 'error'); return; }
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          try {
-            const rawImage = reader.result;
-            const uploadedUrl = await uploadToGoogleDriveViaGAS(rawImage, `profil_${currentUser.id}_${Date.now()}.jpg`, 'profil');
-            if (typeof uploadedUrl === 'string' && uploadedUrl.startsWith('data:image')) {
-              throw new Error('Foto belum berhasil diunggah ke Google Drive. Periksa deployment Apps Script.');
-            }
-            await dbUpdate('master_karyawan', currentUser.id, { foto_profil: uploadedUrl });
-            setCurrentUser({ ...currentUser, foto_profil: uploadedUrl });
-            showToast('Foto profil berhasil diperbarui!');
-          } catch (err) {
-            showDbError(showToast, 'Gagal memperbarui foto profil', err);
-          }
-        };
-        reader.readAsDataURL(file);
-      };
       return (
         <div className="p-5 space-y-4 pb-28">
           <div className="bg-white/90 backdrop-blur-xl p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] text-center">
@@ -2698,7 +2592,7 @@
               </div>
               <label className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center cursor-pointer shadow-md">
                 <i className="fa-solid fa-camera text-xs"></i>
-                <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                <input type="file" accept="image/*" onChange={(e) => { const r = new FileReader(); r.onloadend = () => { setCurrentUser({...currentUser, foto_profil: r.result}); showToast('Foto diperbarui'); }; if(e.target.files[0]) r.readAsDataURL(e.target.files[0]); }} className="hidden" />
               </label>
             </div>
             <h3 className="font-display font-bold text-lg text-slate-800">{currentUser.nama_lengkap}</h3>
@@ -2733,20 +2627,12 @@
 
     function GantiPasswordView({ currentUser, setCurrentUser, showToast, navigateTo }) {
       const [oldPass, setOldPass] = useState(''); const [newPass, setNewPass] = useState(''); const [confirmPass, setConfirmPass] = useState('');
-      const handleSave = async (e) => {
+      const handleSave = (e) => {
         e.preventDefault();
         if (oldPass !== currentUser.password) return showToast('Sandi lama salah!', 'error');
         if (newPass !== confirmPass) return showToast('Konfirmasi tidak cocok!', 'error');
-        try {
-          // Halaman ini digunakan oleh karyawan; simpan sandi ke master_karyawan terlebih dahulu.
-          await dbUpdate('master_karyawan', currentUser.id, { password: newPass });
-          const updatedUser = { ...currentUser, password: newPass };
-          setCurrentUser(updatedUser);
-          showToast('Sandi diubah!');
-          navigateTo('#profil');
-        } catch (err) {
-          showDbError(showToast, 'Gagal mengubah sandi', err);
-        }
+        setCurrentUser({ ...currentUser, password: newPass });
+        showToast('Sandi diubah!'); navigateTo('#profil');
       };
       return (
         <div className="p-5 pb-28">
@@ -2797,80 +2683,115 @@
         if (!deleteConfirmState) return;
         const { karyawanId, karyawanNama, tanggal } = deleteConfirmState;
         setIsDeleting(true);
+
         try {
-          const { data, error } = await requireSupabase().from('presensi').delete()
-            .eq('karyawan_id', karyawanId).eq('tanggal', tanggal).select('id');
-          if (error) throw error;
-          if (!data || data.length === 0) throw new Error('Tidak ada baris presensi yang terhapus. Periksa tanggal, ID karyawan, dan izin RLS.');
+          // 1. Hapus dari tabel presensi di Supabase
+          if (supabase) {
+            const { error } = await supabase
+              .from('presensi')
+              .delete()
+              .eq('karyawan_id', karyawanId)
+              .eq('tanggal', tanggal);
+
+            if (error) {
+              console.error("Gagal menghapus presensi di Supabase:", error);
+              showToast('Gagal menghapus dari Supabase: ' + error.message, 'error');
+              setIsDeleting(false);
+              setDeleteConfirmState(null);
+              return;
+            }
+          }
+
+          // 2. Perbarui state lokal setelah sukses
           setPresensiList(prev => prev.filter(p => !(p.karyawan_id === karyawanId && p.tanggal === tanggal)));
           showToast(`Presensi ${karyawanNama} tanggal ${tanggal} berhasil dihapus dari sistem!`);
         } catch (err) {
-          showDbError(showToast, 'Gagal menghapus presensi', err);
+          console.error("Error eksekusi hapus presensi:", err);
+          showToast('Terjadi kesalahan saat menghapus data.', 'error');
         } finally {
           setIsDeleting(false);
           setDeleteConfirmState(null);
         }
       };
 
-
       const handleSimpanEditPresensi = async (e) => {
         e.preventDefault();
         const { karyawan, masuk, pulang, formMasuk, formPulang } = editingPresensiModal;
-        const updatedList = [...presensiList];
-        const newRecordsForSupabase = [];
-        const deleteIds = [];
 
+        let updatedList = [...presensiList];
+        const newRecordsForSupabase = [];
+
+        // Update / create presensi Masuk
         if (formMasuk.status !== 'Belum' || formMasuk.jam) {
           const masukRecord = {
             id: masuk ? masuk.id : 'prs-' + Date.now() + '-m',
-            karyawan_id: karyawan.id, karyawan_nama: karyawan.nama_lengkap, divisi: karyawan.divisi,
-            tipe: 'masuk', status: formMasuk.status || 'Hadir',
+            karyawan_id: karyawan.id,
+            karyawan_nama: karyawan.nama_lengkap,
+            divisi: karyawan.divisi,
+            tipe: 'masuk',
+            status: formMasuk.status || 'Hadir',
             shift_nama: formMasuk.shift_nama || shiftList[0]?.nama_shift || 'Shift Pagi',
             lokasi_nama: masuk?.lokasi_nama || lokasiList[0]?.nama_lokasi || 'Kantor',
-            latitude: masuk?.latitude || 0, longitude: masuk?.longitude || 0,
-            foto_url: masuk?.foto_url || '', keterangan: formMasuk.keterangan || 'Disesuaikan oleh Admin',
-            tanggal: selectedDate, jam: formMasuk.jam || '08:00:00',
+            latitude: masuk?.latitude || 0,
+            longitude: masuk?.longitude || 0,
+            foto_url: masuk?.foto_url || '',
+            keterangan: formMasuk.keterangan || 'Disesuaikan oleh Admin',
+            tanggal: selectedDate,
+            jam: formMasuk.jam || '08:00:00',
             created_at: masuk?.created_at || new Date().toISOString()
           };
+          updatedList = updatedList.filter(p => !(p.karyawan_id === karyawan.id && p.tanggal === selectedDate && p.tipe === 'masuk'));
+          updatedList.unshift(masukRecord);
           newRecordsForSupabase.push(masukRecord);
-        } else if (masuk && formMasuk.status === 'Belum') deleteIds.push(masuk.id);
+        } else if (masuk && formMasuk.status === 'Belum') {
+          updatedList = updatedList.filter(p => p.id !== masuk.id);
+          if (supabase) {
+            try { await supabase.from('presensi').delete().eq('id', masuk.id); } catch(err){}
+          }
+        }
 
+        // Update / create presensi Keluar/Pulang
         if (formPulang.status !== 'Belum' || formPulang.jam) {
           const pulangRecord = {
             id: pulang ? pulang.id : 'prs-' + Date.now() + '-p',
-            karyawan_id: karyawan.id, karyawan_nama: karyawan.nama_lengkap, divisi: karyawan.divisi,
-            tipe: 'keluar', status: formPulang.status || 'Pulang',
+            karyawan_id: karyawan.id,
+            karyawan_nama: karyawan.nama_lengkap,
+            divisi: karyawan.divisi,
+            tipe: 'keluar',
+            status: formPulang.status || 'Pulang',
             shift_nama: formMasuk.shift_nama || shiftList[0]?.nama_shift || 'Shift Pagi',
             lokasi_nama: pulang?.lokasi_nama || lokasiList[0]?.nama_lokasi || 'Kantor',
-            latitude: pulang?.latitude || 0, longitude: pulang?.longitude || 0,
-            foto_url: pulang?.foto_url || '', keterangan: formPulang.keterangan || 'Disesuaikan oleh Admin',
-            tanggal: selectedDate, jam: formPulang.jam || '17:00:00',
+            latitude: pulang?.latitude || 0,
+            longitude: pulang?.longitude || 0,
+            foto_url: pulang?.foto_url || '',
+            keterangan: formPulang.keterangan || 'Disesuaikan oleh Admin',
+            tanggal: selectedDate,
+            jam: formPulang.jam || '17:00:00',
             created_at: pulang?.created_at || new Date().toISOString()
           };
+          updatedList = updatedList.filter(p => !(p.karyawan_id === karyawan.id && p.tanggal === selectedDate && p.tipe === 'keluar'));
+          updatedList.unshift(pulangRecord);
           newRecordsForSupabase.push(pulangRecord);
-        } else if (pulang && formPulang.status === 'Belum') deleteIds.push(pulang.id);
-
-        try {
-          const db = requireSupabase();
-          for (const id of deleteIds) {
-            const { error } = await db.from('presensi').delete().eq('id', id);
-            if (error) throw error;
+        } else if (pulang && formPulang.status === 'Belum') {
+          updatedList = updatedList.filter(p => p.id !== pulang.id);
+          if (supabase) {
+            try { await supabase.from('presensi').delete().eq('id', pulang.id); } catch(err){}
           }
-          if (newRecordsForSupabase.length) {
-            const { error } = await db.from('presensi').upsert(newRecordsForSupabase);
-            if (error) throw error;
-          }
-          const affectedIds = new Set([...deleteIds, ...newRecordsForSupabase.map(r => r.id)]);
-          let nextList = updatedList.filter(p => !affectedIds.has(p.id) && !(p.karyawan_id === karyawan.id && p.tanggal === selectedDate && ['masuk','keluar'].includes(p.tipe)));
-          nextList = [...newRecordsForSupabase, ...nextList];
-          setPresensiList(nextList);
-          setEditingPresensiModal(null);
-          showToast('Data presensi berhasil diperbarui!');
-        } catch (err) {
-          showDbError(showToast, 'Gagal menyimpan perubahan presensi', err);
         }
-      };
 
+        // Sinkronisasi record baru/edit ke Supabase
+        if (supabase && newRecordsForSupabase.length > 0) {
+          try {
+            await supabase.from('presensi').upsert(newRecordsForSupabase);
+          } catch(err) {
+            console.warn("Gagal menyimpan perubahan presensi ke Supabase:", err);
+          }
+        }
+
+        setPresensiList(updatedList);
+        setEditingPresensiModal(null);
+        showToast('Data presensi berhasil diperbarui!');
+      };
 
       return (
         <div className="flex min-h-[calc(100vh-50px)] bg-slate-50">
@@ -3475,18 +3396,23 @@
       }, [processedData, searchQuery]);
 
       // Simpan perubahan Jatah Libur & Jatah Cuti
-      const handleSaveAdjustment = async (e) => {
+      const handleSaveAdjustment = (e) => {
         e.preventDefault();
         const { karyawan, newLibur, newCuti } = editingModal;
-        const changes = { sisa_libur: parseInt(newLibur, 10) || 0, sisa_cuti: parseInt(newCuti, 10) || 0 };
-        try {
-          await dbUpdate('master_karyawan', karyawan.id, changes);
-          setKaryawanList(prev => prev.map(k => k.id === karyawan.id ? { ...k, ...changes } : k));
-          setEditingModal(null);
-          showToast(`Jatah libur & cuti ${karyawan.nama_lengkap} diperbarui!`);
-        } catch (err) {
-          showDbError(showToast, 'Gagal memperbarui jatah libur & cuti', err);
-        }
+
+        setKaryawanList(prev => prev.map(k => {
+          if (k.id === karyawan.id) {
+            return {
+              ...k,
+              sisa_libur: parseInt(newLibur) || 0,
+              sisa_cuti: parseInt(newCuti) || 0
+            };
+          }
+          return k;
+        }));
+
+        setEditingModal(null);
+        showToast(`Jatah libur & cuti ${karyawan.nama_lengkap} diperbarui!`);
       };
 
       const handleExport = () => {
@@ -4168,27 +4094,17 @@
         });
       }, [lemburList, filterStatus, searchQuery]);
 
-      const handleUpdateStatus = async (id, newStatus) => {
-        try {
-          await dbUpdate('pengajuan_lembur', id, { status: newStatus });
-          setLemburList(prev => prev.map(l => l.id === id ? { ...l, status: newStatus } : l));
-          showToast(`Pengajuan lembur berhasil di-${newStatus === 'Approved' ? 'Setujui' : newStatus === 'Rejected' ? 'Tolak' : 'ubah'}!`);
-        } catch (err) {
-          showDbError(showToast, 'Gagal memperbarui status lembur', err);
-        }
+      const handleUpdateStatus = (id, newStatus) => {
+        setLemburList(prev => prev.map(l => l.id === id ? { ...l, status: newStatus } : l));
+        showToast(`Pengajuan lembur berhasil di-${newStatus === 'Approved' ? 'Setujui' : 'Tolak'}!`);
       };
 
-      const handleDelete = async (id) => {
-        if (!confirm('Apakah Anda yakin ingin menghapus data pengajuan lembur ini?')) return;
-        try {
-          await dbDelete('pengajuan_lembur', id);
+      const handleDelete = (id) => {
+        if (confirm('Apakah Anda yakin ingin menghapus data pengajuan lembur ini?')) {
           setLemburList(prev => prev.filter(l => l.id !== id));
           showToast('Data pengajuan lembur dihapus.');
-        } catch (err) {
-          showDbError(showToast, 'Gagal menghapus pengajuan lembur', err);
         }
       };
-
 
       const handleExport = () => {
         const rows = filteredList.map((item, idx) => ({
@@ -4464,28 +4380,24 @@
         setShowModal(true);
       };
 
-      const handleSave = async (e) => {
+      const handleSave = (e) => {
         e.preventDefault();
-        const { provinsi, kota, jalan, ...dataForm } = form;
-        const alamat = JSON.stringify({ provinsi, kota, jalan });
-        try {
-          if (editingId) {
-            // provinsi/kota/jalan hanya bagian form; di database disimpan sebagai JSON pada kolom alamat.
-            const payload = { ...dataForm, alamat };
-            await dbUpdate('master_karyawan', editingId, payload);
-            setKaryawanList(prev => prev.map(k => k.id === editingId ? { ...k, ...payload } : k));
-          } else {
-            const newKaryawan = { id: 'kry-' + Date.now(), ...dataForm, alamat, shifts: ['Pagi (08:00 - 17:00)'], sisa_libur: 4, sisa_cuti: 0 };
-            await dbInsert('master_karyawan', newKaryawan);
-            setKaryawanList(prev => [...prev, newKaryawan]);
-          }
-          setShowModal(false);
-          showToast(editingId ? 'Data karyawan diperbarui!' : 'Karyawan baru ditambahkan!');
-        } catch (err) {
-          showDbError(showToast, 'Gagal menyimpan data karyawan', err);
+        const alamat = JSON.stringify({ provinsi: form.provinsi, kota: form.kota, jalan: form.jalan });
+        if(editingId) {
+          setKaryawanList(karyawanList.map(k => k.id === editingId ? { ...k, ...form, alamat } : k));
+        } else {
+          setKaryawanList([...karyawanList, { 
+            id: 'kry-' + Date.now(), 
+            ...form, 
+            alamat, 
+            shifts: ['Pagi (08:00 - 17:00)'], 
+            sisa_libur: 4, 
+            sisa_cuti: 0 
+          }]);
         }
+        setShowModal(false); 
+        showToast(editingId ? 'Data karyawan diperbarui!' : 'Karyawan baru ditambahkan!');
       };
-
 
       return (
         <div className="space-y-6">
@@ -4559,7 +4471,7 @@
                     </td>
                     <td className="p-4 text-center">
                       <button onClick={()=>openModal(k)} className="w-8 h-8 rounded-full bg-slate-50 text-indigo-500 hover:bg-indigo-50 mx-1" title="Edit Data Karyawan"><i className="fa-solid fa-pen-to-square"></i></button>
-                      <button onClick={async()=>{if(!confirm(`Hapus data karyawan ${k.nama_lengkap}?`)) return; try { await dbDelete('master_karyawan', k.id); setKaryawanList(prev=>prev.filter(x=>x.id!==k.id)); showToast('Karyawan dihapus!'); } catch(err) { showDbError(showToast, 'Gagal menghapus karyawan', err); }}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1" title="Hapus Karyawan"><i className="fa-solid fa-trash"></i></button>
+                      <button onClick={()=>{setKaryawanList(karyawanList.filter(x=>x.id!==k.id)); showToast('Karyawan dihapus!')}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1" title="Hapus Karyawan"><i className="fa-solid fa-trash"></i></button>
                     </td>
                   </tr>
                 ))}
@@ -4693,25 +4605,13 @@
         setShowModal(true);
       };
 
-      const handleSave = async (e) => {
+      const handleSave = (e) => {
         e.preventDefault();
-        const payload = { ...form, latitude: parseFloat(form.latitude), longitude: parseFloat(form.longitude), radius_meter: parseInt(form.radius_meter, 10) };
-        if (!Number.isFinite(payload.latitude) || !Number.isFinite(payload.longitude) || !Number.isFinite(payload.radius_meter)) {
-          showToast('Latitude, longitude, dan radius harus berupa angka yang valid.', 'error'); return;
-        }
-        try {
-          if (editingId) {
-            await dbUpdate('master_lokasi', editingId, payload);
-            setLokasiList(prev => prev.map(item => item.id === editingId ? { ...item, ...payload } : item));
-          } else {
-            const newItem = { id: 'lok-' + Date.now(), ...payload };
-            await dbInsert('master_lokasi', newItem);
-            setLokasiList(prev => [...prev, newItem]);
-          }
-          setShowModal(false); showToast(editingId ? 'Lokasi diperbarui!' : 'Lokasi ditambahkan!');
-        } catch (err) { showDbError(showToast, 'Gagal menyimpan lokasi', err); }
+        const payload = { ...form, latitude: parseFloat(form.latitude), longitude: parseFloat(form.longitude), radius_meter: parseInt(form.radius_meter) };
+        if(editingId) setLokasiList(lokasiList.map(item => item.id === editingId ? { ...item, ...payload } : item));
+        else setLokasiList([...lokasiList, { id: 'lok-'+Date.now(), ...payload }]);
+        setShowModal(false); showToast(editingId ? 'Lokasi diperbarui!' : 'Lokasi ditambahkan!');
       };
-
 
       return (
         <div className="space-y-6">
@@ -4738,7 +4638,7 @@
                     <td className="p-4 font-mono-numbers text-slate-500">{item.radius_meter}m</td>
                     <td className="p-4 text-center">
                       <button onClick={()=>openModal(item)} className="w-8 h-8 rounded-full bg-slate-50 text-indigo-500 hover:bg-indigo-50 mx-1"><i className="fa-solid fa-pen-to-square"></i></button>
-                      <button onClick={async()=>{if(!confirm(`Hapus lokasi ${item.nama_lokasi}?`)) return; try { await dbDelete('master_lokasi', item.id); setLokasiList(prev=>prev.filter(x=>x.id!==item.id)); showToast('Lokasi dihapus'); } catch(err) { showDbError(showToast, 'Gagal menghapus lokasi', err); }}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1"><i className="fa-solid fa-trash"></i></button>
+                      <button onClick={()=>{setLokasiList(lokasiList.filter(x=>x.id!==item.id)); showToast('Dihapus')}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1"><i className="fa-solid fa-trash"></i></button>
                     </td>
                   </tr>
                 ))}
@@ -4785,36 +4685,21 @@
         setShowModal(true);
       };
 
-      const handleSave = async (e) => {
+      const handleSave = (e) => {
         e.preventDefault();
-        try {
-          if (editingId) {
-            await dbUpdate('master_shift', editingId, form);
-            setShiftList(prev => prev.map(item => item.id === editingId ? { ...item, ...form } : item));
-          } else {
-            const newItem = { id: 'sh-' + Date.now(), ...form };
-            await dbInsert('master_shift', newItem);
-            setShiftList(prev => [...prev, newItem]);
-          }
-          setShowModal(false); showToast(editingId ? 'Shift diperbarui!' : 'Shift ditambahkan!');
-        } catch (err) { showDbError(showToast, 'Gagal menyimpan shift', err); }
-      };
-
-
-      const handleSaveToleransi = async () => {
-        const value = Number(tempToleransi);
-        if (!Number.isFinite(value) || value < 0 || value > 60) {
-          showToast('Toleransi harus antara 0 sampai 60 menit.', 'error'); return;
+        if(editingId) {
+          setShiftList(shiftList.map(item => item.id === editingId ? { ...item, ...form } : item));
+        } else {
+          setShiftList([...shiftList, { id: 'sh-' + Date.now(), ...form }]);
         }
-        try {
-          const { data, error } = await requireSupabase().from('settings').update({ value: String(value) }).eq('key', 'toleransi_menit').select();
-          if (error) throw error;
-          if (!data || data.length === 0) throw new Error('Baris settings dengan key toleransi_menit tidak ditemukan atau tidak dapat diubah.');
-          setToleransiMenit(value);
-          showToast(`Toleransi diperbarui menjadi ${value} menit!`);
-        } catch (err) { showDbError(showToast, 'Gagal menyimpan toleransi', err); }
+        setShowModal(false);
+        showToast(editingId ? 'Shift diperbarui!' : 'Shift ditambahkan!');
       };
 
+      const handleSaveToleransi = () => {
+        setToleransiMenit(Number(tempToleransi));
+        showToast(`Toleransi diperbarui menjadi ${tempToleransi} menit!`);
+      };
 
       return (
         <div className="space-y-6">
@@ -4874,7 +4759,7 @@
                       <button onClick={()=>openModal(item)} className="w-8 h-8 rounded-full bg-slate-50 text-indigo-500 hover:bg-indigo-50 mx-1">
                         <i className="fa-solid fa-pen-to-square"></i>
                       </button>
-                      <button onClick={async()=>{if(!confirm(`Hapus shift ${item.nama_shift}?`)) return; try { await dbDelete('master_shift', item.id); setShiftList(prev=>prev.filter(x=>x.id!==item.id)); showToast('Shift dihapus'); } catch(err) { showDbError(showToast, 'Gagal menghapus shift', err); }}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1">
+                      <button onClick={()=>{setShiftList(shiftList.filter(x=>x.id!==item.id)); showToast('Shift dihapus')}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1">
                         <i className="fa-solid fa-trash"></i>
                       </button>
                     </td>
@@ -4969,21 +4854,16 @@
         }
       };
 
-      const handleSave = async (e) => {
+      const handleSave = (e) => {
         e.preventDefault();
-        try {
-          if (editingId) {
-            await dbUpdate('master_divisi', editingId, form);
-            setDivisiList(prev => prev.map(item => item.id === editingId ? { ...item, ...form } : item));
-          } else {
-            const newItem = { id: 'div-' + Date.now(), ...form };
-            await dbInsert('master_divisi', newItem);
-            setDivisiList(prev => [...prev, newItem]);
-          }
-          setShowModal(false); showToast(editingId ? 'Divisi diperbarui!' : 'Divisi ditambahkan!');
-        } catch (err) { showDbError(showToast, 'Gagal menyimpan divisi', err); }
+        if(editingId) {
+          setDivisiList(divisiList.map(item => item.id === editingId ? { ...item, ...form } : item));
+        } else {
+          setDivisiList([...divisiList, { id: 'div-' + Date.now(), ...form }]);
+        }
+        setShowModal(false);
+        showToast(editingId ? 'Divisi diperbarui!' : 'Divisi ditambahkan!');
       };
-
 
       return (
         <div className="space-y-6">
@@ -5038,7 +4918,7 @@
                       <button onClick={()=>openModal(item)} className="w-8 h-8 rounded-full bg-slate-50 text-indigo-500 hover:bg-indigo-50 mx-1">
                         <i className="fa-solid fa-pen-to-square"></i>
                       </button>
-                      <button onClick={async()=>{if(!confirm(`Hapus divisi ${item.nama_divisi}?`)) return; try { await dbDelete('master_divisi', item.id); setDivisiList(prev=>prev.filter(x=>x.id!==item.id)); showToast('Divisi dihapus'); } catch(err) { showDbError(showToast, 'Gagal menghapus divisi', err); }}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1">
+                      <button onClick={()=>{setDivisiList(divisiList.filter(x=>x.id!==item.id)); showToast('Divisi dihapus')}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1">
                         <i className="fa-solid fa-trash"></i>
                       </button>
                     </td>
@@ -5125,21 +5005,16 @@
         setShowModal(true);
       };
 
-      const handleSave = async (e) => {
+      const handleSave = (e) => {
         e.preventDefault();
-        try {
-          if (editingId) {
-            await dbUpdate('master_jabatan', editingId, form);
-            setJabatanList(prev => prev.map(item => item.id === editingId ? { ...item, ...form } : item));
-          } else {
-            const newItem = { id: 'jab-' + Date.now(), ...form };
-            await dbInsert('master_jabatan', newItem);
-            setJabatanList(prev => [...prev, newItem]);
-          }
-          setShowModal(false); showToast(editingId ? 'Jabatan diperbarui!' : 'Jabatan ditambahkan!');
-        } catch (err) { showDbError(showToast, 'Gagal menyimpan jabatan', err); }
+        if(editingId) {
+          setJabatanList(jabatanList.map(item => item.id === editingId ? { ...item, ...form } : item));
+        } else {
+          setJabatanList([...jabatanList, { id: 'jab-' + Date.now(), ...form }]);
+        }
+        setShowModal(false);
+        showToast(editingId ? 'Jabatan diperbarui!' : 'Jabatan ditambahkan!');
       };
-
 
       return (
         <div className="space-y-6">
@@ -5177,7 +5052,7 @@
                       <button onClick={()=>openModal(item)} className="w-8 h-8 rounded-full bg-slate-50 text-indigo-500 hover:bg-indigo-50 mx-1">
                         <i className="fa-solid fa-pen-to-square"></i>
                       </button>
-                      <button onClick={async()=>{if(!confirm(`Hapus jabatan ${item.nama_jabatan}?`)) return; try { await dbDelete('master_jabatan', item.id); setJabatanList(prev=>prev.filter(x=>x.id!==item.id)); showToast('Jabatan dihapus'); } catch(err) { showDbError(showToast, 'Gagal menghapus jabatan', err); }}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1">
+                      <button onClick={()=>{setJabatanList(jabatanList.filter(x=>x.id!==item.id)); showToast('Jabatan dihapus')}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1">
                         <i className="fa-solid fa-trash"></i>
                       </button>
                     </td>
@@ -5261,37 +5136,37 @@
         setShowModal(true);
       };
 
-      const handleSave = async (e) => {
+      const handleSave = (e) => {
         e.preventDefault();
         if (!form.nama_lengkap.trim() || !form.username.trim() || !form.password.trim()) {
-          showToast('Nama, username, dan password wajib diisi!', 'error'); return;
+          showToast('Nama, username, dan password wajib diisi!', 'error');
+          return;
         }
-        try {
-          if (editingId) {
-            await dbUpdate('master_admin', editingId, form);
-            setAdminList(prev => prev.map(a => a.id === editingId ? { ...a, ...form } : a));
-            showToast('Data administrator berhasil diperbarui!');
-          } else {
-            const newAdmin = { id: 'adm-' + Date.now(), ...form };
-            await dbInsert('master_admin', newAdmin);
-            setAdminList(prev => [...prev, newAdmin]);
-            showToast('Admin baru berhasil ditambahkan!');
-          }
-          setShowModal(false);
-        } catch (err) { showDbError(showToast, 'Gagal menyimpan administrator', err); }
+
+        if (editingId) {
+          setAdminList(prev => prev.map(a => a.id === editingId ? { ...a, ...form } : a));
+          showToast('Data administrator berhasil diperbarui!');
+        } else {
+          const newAdmin = {
+            id: 'adm-' + Date.now(),
+            ...form
+          };
+          setAdminList([...adminList, newAdmin]);
+          showToast('Admin baru berhasil ditambahkan!');
+        }
+        setShowModal(false);
       };
 
-
-      const handleDelete = async (id, nama) => {
-        if (adminList.length <= 1) { showToast('Tidak dapat menghapus admin terakhir!', 'error'); return; }
-        if (!confirm(`Hapus akun admin "${nama}"?`)) return;
-        try {
-          await dbDelete('master_admin', id);
+      const handleDelete = (id, nama) => {
+        if (adminList.length <= 1) {
+          showToast('Tidak dapat menghapus admin terakhir!', 'error');
+          return;
+        }
+        if (confirm(`Hapus akun admin "${nama}"?`)) {
           setAdminList(prev => prev.filter(a => a.id !== id));
           showToast('Akun admin berhasil dihapus.');
-        } catch (err) { showDbError(showToast, 'Gagal menghapus administrator', err); }
+        }
       };
-
 
       return (
         <div className="space-y-6">
@@ -5416,7 +5291,7 @@
                     <label className="text-[10px] font-bold text-slate-400 block mb-1">Email</label>
                     <input 
                       type="email" 
-                      placeholder="Email admin" 
+                      placeholder="admin@suryatokoku.com" 
                       value={form.email} 
                       onChange={e => setForm({ ...form, email: e.target.value })} 
                       className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none focus:border-violet-500" 
@@ -5509,34 +5384,34 @@
         setShowModal(true);
       };
 
-      const handleSave = async (e) => {
+      const handleSave = (e) => {
         e.preventDefault();
-        if (!form.judul.trim() || !form.isi.trim()) { showToast('Judul dan isi pengumuman wajib diisi!', 'error'); return; }
-        try {
-          if (editingId) {
-            await dbUpdate('pengumuman', editingId, form);
-            setPengumumanList(prev => prev.map(p => p.id === editingId ? { ...p, ...form } : p));
-            showToast('Pengumuman berhasil diperbarui!');
-          } else {
-            const newItem = { id: 'pgm-' + Date.now(), ...form, created_at: new Date().toISOString() };
-            await dbInsert('pengumuman', newItem);
-            setPengumumanList(prev => [newItem, ...prev]);
-            showToast('Pengumuman baru berhasil diterbitkan!');
-          }
-          setShowModal(false);
-        } catch (err) { showDbError(showToast, 'Gagal menyimpan pengumuman', err); }
+        if (!form.judul.trim() || !form.isi.trim()) {
+          showToast('Judul dan isi pengumuman wajib diisi!', 'error');
+          return;
+        }
+
+        if (editingId) {
+          setPengumumanList(prev => prev.map(p => p.id === editingId ? { ...p, ...form } : p));
+          showToast('Pengumuman berhasil diperbarui!');
+        } else {
+          const newItem = {
+            id: 'pgm-' + Date.now(),
+            ...form,
+            created_at: new Date().toISOString()
+          };
+          setPengumumanList([newItem, ...pengumumanList]);
+          showToast('Pengumuman baru berhasil diterbitkan!');
+        }
+        setShowModal(false);
       };
 
-
-      const handleDelete = async (id, judul) => {
-        if (!confirm(`Hapus pengumuman "${judul}"?`)) return;
-        try {
-          await dbDelete('pengumuman', id);
+      const handleDelete = (id, judul) => {
+        if (confirm(`Hapus pengumuman "${judul}"?`)) {
           setPengumumanList(prev => prev.filter(p => p.id !== id));
           showToast('Pengumuman berhasil dihapus.');
-        } catch (err) { showDbError(showToast, 'Gagal menghapus pengumuman', err); }
+        }
       };
-
 
       const getKategoriBadgeColor = (kategori) => {
         switch (kategori) {
