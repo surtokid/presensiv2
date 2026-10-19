@@ -18,9 +18,6 @@
 <link rel="apple-touch-icon" href="./Logo%20Surtok.png">
 
 <!-- Google Fonts: Plus Jakarta Sans & Inter -->
-
-  
-  <!-- Google Fonts: Plus Jakarta Sans & Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -101,7 +98,6 @@
     .animation-delay-4000 { animation-delay: 4s; }
   </style>
 
-  
 <script>
   // Simpan permintaan instalasi dari browser sedini mungkin.
   window.__suryatokokuInstallPrompt = null;
@@ -788,7 +784,7 @@
     return (
       <div className="min-h-screen flex flex-col justify-between">
         {/* Top Navigation Bar: Ditampilkan kembali */}
-        <header className="hidden bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
+        <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
           {/* Brand Logo */}
           <div 
             onClick={() => navigateTo(isDashboardRoute ? '#dashboard' : '#karyawan')}
@@ -2966,14 +2962,8 @@
                 <span className="text-xs font-bold text-slate-700">Ganti Sandi</span>
               </div>
               <i className="fa-solid fa-chevron-right text-xs text-slate-300"></i>
-            </a>
-            
-<button
-  type="button"
-  onClick={() => window.installSuryatokokuPWA()}
-  className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-slate-50 transition"
->
-
+            </a>           
+<button type="button"  onClick={() => window.installSuryatokokuPWA()}  className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-slate-50 transition">
               <div className="flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-full bg-slate-50 text-slate-600 flex items-center justify-center"><i className="fa-solid fa-download text-xs"></i></div>
                 <span className="text-xs font-bold text-slate-700">Install App</span>
@@ -3024,12 +3014,14 @@
       adminList, setAdminList,
       lemburList, setLemburList, klaimList, setKlaimList, toleransiMenit, setToleransiMenit, showToast, handleLogout
     }) {
-      const [activeModule, setActiveModule] = useState('karyawan'); 
+      const [activeModule, setActiveModule] = useState('harian'); 
       const [sidebarPinned, setSidebarPinned] = useState(true);
       const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
       const [filterStatusHarian, setFilterStatusHarian] = useState('Semua');
       const [previewPhotoUrl, setPreviewPhotoUrl] = useState(null);
       const [editingPresensiModal, setEditingPresensiModal] = useState(null);
+      const [deleteConfirmState, setDeleteConfirmState] = useState(null);
+      const [isDeleting, setIsDeleting] = useState(false);
 
       const exportToExcel = (data, fileName) => {
         const ws = XLSX.utils.json_to_sheet(data);
@@ -3039,18 +3031,51 @@
         showToast('Excel diunduh!');
       };
 
-      const handleHapusPresensiHarian = (karyawanId, karyawanNama) => {
-        if (confirm(`Hapus seluruh data presensi ${karyawanNama} pada tanggal ${selectedDate}?`)) {
-          setPresensiList(prev => prev.filter(p => !(p.karyawan_id === karyawanId && p.tanggal === selectedDate)));
-          showToast(`Presensi ${karyawanNama} tanggal ${selectedDate} berhasil dihapus.`);
+      const requestHapusPresensi = (karyawanId, karyawanNama) => {
+        setDeleteConfirmState({ karyawanId, karyawanNama, tanggal: selectedDate });
+      };
+
+      const executeHapusPresensi = async () => {
+        if (!deleteConfirmState) return;
+        const { karyawanId, karyawanNama, tanggal } = deleteConfirmState;
+        setIsDeleting(true);
+
+        try {
+          // 1. Hapus dari tabel presensi di Supabase
+          if (supabase) {
+            const { error } = await supabase
+              .from('presensi')
+              .delete()
+              .eq('karyawan_id', karyawanId)
+              .eq('tanggal', tanggal);
+
+            if (error) {
+              console.error("Gagal menghapus presensi di Supabase:", error);
+              showToast('Gagal menghapus dari Supabase: ' + error.message, 'error');
+              setIsDeleting(false);
+              setDeleteConfirmState(null);
+              return;
+            }
+          }
+
+          // 2. Perbarui state lokal setelah sukses
+          setPresensiList(prev => prev.filter(p => !(p.karyawan_id === karyawanId && p.tanggal === tanggal)));
+          showToast(`Presensi ${karyawanNama} tanggal ${tanggal} berhasil dihapus dari sistem!`);
+        } catch (err) {
+          console.error("Error eksekusi hapus presensi:", err);
+          showToast('Terjadi kesalahan saat menghapus data.', 'error');
+        } finally {
+          setIsDeleting(false);
+          setDeleteConfirmState(null);
         }
       };
 
-      const handleSimpanEditPresensi = (e) => {
+      const handleSimpanEditPresensi = async (e) => {
         e.preventDefault();
         const { karyawan, masuk, pulang, formMasuk, formPulang } = editingPresensiModal;
 
         let updatedList = [...presensiList];
+        const newRecordsForSupabase = [];
 
         // Update / create presensi Masuk
         if (formMasuk.status !== 'Belum' || formMasuk.jam) {
@@ -3073,8 +3098,12 @@
           };
           updatedList = updatedList.filter(p => !(p.karyawan_id === karyawan.id && p.tanggal === selectedDate && p.tipe === 'masuk'));
           updatedList.unshift(masukRecord);
+          newRecordsForSupabase.push(masukRecord);
         } else if (masuk && formMasuk.status === 'Belum') {
           updatedList = updatedList.filter(p => p.id !== masuk.id);
+          if (supabase) {
+            try { await supabase.from('presensi').delete().eq('id', masuk.id); } catch(err){}
+          }
         }
 
         // Update / create presensi Keluar/Pulang
@@ -3098,8 +3127,21 @@
           };
           updatedList = updatedList.filter(p => !(p.karyawan_id === karyawan.id && p.tanggal === selectedDate && p.tipe === 'keluar'));
           updatedList.unshift(pulangRecord);
+          newRecordsForSupabase.push(pulangRecord);
         } else if (pulang && formPulang.status === 'Belum') {
           updatedList = updatedList.filter(p => p.id !== pulang.id);
+          if (supabase) {
+            try { await supabase.from('presensi').delete().eq('id', pulang.id); } catch(err){}
+          }
+        }
+
+        // Sinkronisasi record baru/edit ke Supabase
+        if (supabase && newRecordsForSupabase.length > 0) {
+          try {
+            await supabase.from('presensi').upsert(newRecordsForSupabase);
+          } catch(err) {
+            console.warn("Gagal menyimpan perubahan presensi ke Supabase:", err);
+          }
         }
 
         setPresensiList(updatedList);
@@ -3338,7 +3380,7 @@
                                     </button>
 
                                     <button 
-                                      onClick={() => handleHapusPresensiHarian(k.id, k.nama_lengkap)}
+                                      onClick={() => requestHapusPresensi(k.id, k.nama_lengkap)}
                                       disabled={!m && !p}
                                       className={`w-8 h-8 rounded-full flex items-center justify-center transition ${
                                         m || p 
@@ -3361,6 +3403,7 @@
               </div>
             )}
 
+            {}
             {/* Modal Pratinjau Foto Selfie */}
             {previewPhotoUrl && (
               <div 
@@ -3394,6 +3437,46 @@
                   >
                     Tutup
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Konfirmasi Hapus Presensi Harian dari Supabase */}
+            {deleteConfirmState && (
+              <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-[2rem] max-w-xs w-full p-6 text-center shadow-2xl border border-slate-100">
+                  <div className="w-14 h-14 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4">
+                    <i className="fa-solid fa-trash-can text-2xl"></i>
+                  </div>
+                  <h3 className="font-display font-bold text-base text-slate-800">Hapus Presensi?</h3>
+                  <p className="text-xs text-slate-500 mt-1 mb-5 leading-relaxed">
+                    Hapus data presensi <span className="font-bold text-slate-700">{deleteConfirmState.karyawanNama}</span> pada tanggal <span className="font-bold text-slate-700">{deleteConfirmState.tanggal}</span>? Data akan langsung terhapus dari Supabase.
+                  </p>
+                  <div className="flex gap-2">
+                    <button 
+                      type="button"
+                      disabled={isDeleting}
+                      onClick={() => setDeleteConfirmState(null)}
+                      className="w-1/2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-full transition"
+                    >
+                      Batal
+                    </button>
+                    <button 
+                      type="button"
+                      disabled={isDeleting}
+                      onClick={executeHapusPresensi}
+                      className="w-1/2 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-full transition shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+                    >
+                      {isDeleting ? (
+                        <>
+                          <i className="fa-solid fa-spinner fa-spin"></i>
+                          <span>Menghapus...</span>
+                        </>
+                      ) : (
+                        <span>Ya, Hapus</span>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -5972,7 +6055,7 @@
     const rootElement = document.getElementById('root');
     ReactDOM.createRoot(rootElement).render(<App />);
   </script>
-  
+
 <!-- PWA: Registrasi Service Worker -->
 <script>
   if ("serviceWorker" in navigator) {
