@@ -1,6 +1,6 @@
 {
-"name": "Suryatokoku",
-"short_name": "Suryatokoku",
+"name": "App Suryatokoku",
+"short_name": "App Surtok",
 "start_url": "./",
 "display": "standalone",
 "background_color": "#f1f5f9",
