@@ -3,8 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Suryatokoku - Presensi & HRIS Modern</title>
-  <link rel="icon" type="image/png" href="Logo Surtok.png">
+  
+<title>Suryatokoku - Presensi & HRIS Modern</title>
+<link rel="icon" type="image/png" href="./Logo%20Surtok.png">
+
+<!-- PWA: Manifest dan pengaturan tampilan -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#000000">
+
+<!-- Dukungan tampilan iPhone -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="App Suryatokoku">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="./Logo%20Surtok.png">
+
+<!-- Google Fonts: Plus Jakarta Sans & Inter -->
+
   
   <!-- Google Fonts: Plus Jakarta Sans & Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -102,10 +116,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
-    // =========================================================================
-    // KONFIGURASI SUPABASE & GOOGLE APPS SCRIPT (DRIVE STORAGE)
-    // Silakan ganti placeholder berikut dengan kredensial proyek Anda:
-    // =========================================================================
+    // Supabase & Google Drive via Google Apps Script (GAS) Configuration
     const SUPABASE_URL = "https://iwtxncstjuwhreqfrmfo.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3dHhuY3N0anV3aHJlcWZybWZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzOTA3NjIsImV4cCI6MjEwNzk2Njc2Mn0.5tAgDqts15c4M295GBerjZ3PRhMBpmHN19FHW5U7ank";
     const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz2XNXvOnw-bL9SVKhcgJvKuYiRYJtLMqoNLeGSesIUss_s2rv6c83TO-ZB0QsP5J70OA/exec";
@@ -113,47 +124,45 @@
 
     let supabase = null;
     try {
-      if (window.supabase && SUPABASE_URL && !SUPABASE_URL.includes("your-supabase-project")) {
+      if (window.supabase && SUPABASE_URL) {
         supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       }
     } catch(e) {
-      console.warn("Supabase initialization status:", e);
+      console.warn("Supabase initialization error:", e);
     }
 
-    // Fungsi upload gambar (Base64) ke Google Drive via Google Apps Script
-    async function uploadToGoogleDrive(base64Data, filenamePrefix = "img") {
-      if (!base64Data) return '';
-      // Jika URL sudah berupa link web atau drive, tidak perlu di-upload ulang
-      if (base64Data.startsWith('http://') || base64Data.startsWith('https://')) {
-        return base64Data;
+    // Fungsi Pengunggah Media ke Google Drive melalui Google Apps Script Web App
+    const uploadToGoogleDriveViaGAS = async (base64Image, fileName = '', subFolder = 'presensi') => {
+      if (!base64Image || !base64Image.startsWith('data:image')) {
+        return base64Image || '';
       }
       if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL.includes("YOUR_DEPLOYMENT_ID")) {
-        console.warn("GAS_WEB_APP_URL belum dikonfigurasi. Menggunakan base64 lokal.");
-        return base64Data;
+        return base64Image;
       }
-
       try {
+        const payload = {
+          image: base64Image,
+          name: fileName || `${subFolder}_${Date.now()}.jpg`,
+          subFolder: subFolder,
+          folderId: GOOGLE_DRIVE_FOLDER_ID
+        };
         const response = await fetch(GAS_WEB_APP_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({
-            image: base64Data,
-            filename: `${filenamePrefix}_${Date.now()}.jpg`,
-            folderId: GOOGLE_DRIVE_FOLDER_ID
-          })
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
         });
-
         const result = await response.json();
-        if (result && result.status === 'success' && result.url) {
-          return result.url;
+        if (result && result.status === 'success' && result.fileUrl) {
+          return result.fileUrl;
+        } else {
+          console.warn("Respon GAS tidak sukses, fallback ke base64:", result);
+          return base64Image;
         }
-        console.warn("Gagal mendapatkan link publik dari GAS:", result);
-        return base64Data;
       } catch (err) {
         console.error("Gagal mengunggah foto ke Google Drive:", err);
-        return base64Data;
+        return base64Image;
       }
-    }
+    };
 
     // Sound Notification with Web Audio API
     const playNotificationSound = (type = 'success') => {
@@ -223,534 +232,839 @@
       });
     }
 
+    // Initial Master Data for Mock Storage
+    const INITIAL_KARYAWAN = [
+      {
+        id: 'kry-001',
+        nama_lengkap: 'Budi Pratama, S.Kom',
+        username: 'budi',
+        password: '123',
+        no_wa: '081234567890',
+        email: 'budi@suryatokoku.com',
+        divisi: 'Teknologi & IT',
+        tgl_lahir: '1995-04-12',
+        alamat: JSON.stringify({ provinsi: 'Jawa Barat', kota: 'Kota Bandung', jalan: 'Jl. Surya Kencana No. 45' }),
+        shifts: ['Pagi (08:00 - 17:00)', 'Shift Malam (20:00 - 05:00)'],
+        sisa_libur: 3,
+        sisa_cuti: 0,
+        foto_profil: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
+      },
+      {
+        id: 'kry-002',
+        nama_lengkap: 'Siti Sarah Rahmawati',
+        username: 'siti',
+        password: '123',
+        no_wa: '085712345678',
+        email: 'siti@suryatokoku.com',
+        divisi: 'Operasional Toko',
+        tgl_lahir: '1998-08-20',
+        alamat: JSON.stringify({ provinsi: 'Jawa Barat', kota: 'Cirebon', jalan: 'Jl. Siliwangi No. 12' }),
+        shifts: ['Pagi (08:00 - 17:00)', 'Siang (12:00 - 21:00)'],
+        sisa_libur: 4,
+        sisa_cuti: 0,
+        foto_profil: ''
+      },
+      {
+        id: 'kry-003',
+        nama_lengkap: 'Ahmad Faisal',
+        username: 'faisal',
+        password: '123',
+        no_wa: '08987654321',
+        email: 'faisal@suryatokoku.com',
+        divisi: 'Logistik & Gudang',
+        tgl_lahir: '1994-01-15',
+        alamat: JSON.stringify({ provinsi: 'Jawa Barat', kota: 'Kuningan', jalan: 'Jl. Sudirman No. 8' }),
+        shifts: ['Pagi (08:00 - 17:00)'],
+        sisa_libur: 2,
+        sisa_cuti: 0,
+        foto_profil: ''
+      }
+    ];
+
+    const INITIAL_LOKASI = [
+      { id: 'lok-01', nama_lokasi: 'Kantor Pusat Suryatokoku', latitude: -6.9175, longitude: 107.6191, radius_meter: 150 },
+      { id: 'lok-02', nama_lokasi: 'Gudang Hub Cirebon', latitude: -6.7063, longitude: 108.5570, radius_meter: 120 },
+    ];
+
+    const INITIAL_DIVISI = [
+      { id: 'div-01', nama_divisi: 'Teknologi & IT', shifts: ['Pagi (08:00 - 17:00)'], allow_cuti: true },
+      { id: 'div-02', nama_divisi: 'Operasional Toko', shifts: ['Pagi (08:00 - 17:00)', 'Siang (12:00 - 21:00)'], allow_cuti: false },
+      { id: 'div-03', nama_divisi: 'Logistik & Gudang', shifts: ['Pagi (08:00 - 17:00)'], allow_cuti: true }
+    ];
+
+    const INITIAL_JABATAN = [
+      { id: 'jab-01', nama_jabatan: 'Frontend Developer', divisi: 'Teknologi & IT' },
+      { id: 'jab-02', nama_jabatan: 'Backend Developer', divisi: 'Teknologi & IT' },
+      { id: 'jab-03', nama_jabatan: 'Kasir Toko', divisi: 'Operasional Toko' },
+      { id: 'jab-04', nama_jabatan: 'Kepala Toko', divisi: 'Operasional Toko' },
+      { id: 'jab-05', nama_jabatan: 'Staff Pergudangan', divisi: 'Logistik & Gudang' }
+    ];
+
+    const INITIAL_SHIFTS = [
+      { id: 'sh-01', nama_shift: 'Pagi (08:00 - 17:00)', jam_masuk: '08:00', jam_pulang: '17:00' },
+      { id: 'sh-02', nama_shift: 'Siang (12:00 - 21:00)', jam_masuk: '12:00', jam_pulang: '21:00' },
+    ];
+
+    const INITIAL_PENGUMUMAN = [
+      { 
+        id: 'pgm-1', 
+        judul: 'Pemberitahuan Cut-Off Presensi & Penggajian Periode 26 - 25', 
+        kategori: 'Payroll',
+        isi: 'Diberitahukan kepada seluruh karyawan bahwa batas akhir verifikasi presensi, pengajuan lembur, dan klaim kehadiran untuk periode penggajian bulan ini adalah tanggal 25 pukul 23:59 WIB. Mohon segera mengecek riwayat absensi masing-masing pada menu Riwayat di aplikasi.', 
+        author: 'HRD Suryatokoku', 
+        created_at: new Date(Date.now() - 1 * 86400000).toISOString() 
+      },
+      { 
+        id: 'pgm-2', 
+        judul: 'Pembaruan Kebijakan Seragam & Standar Sanitasi Toko', 
+        kategori: 'Operasional',
+        isi: 'Mulai pekan ini, seluruh staf operasional toko dan kasir diwajibkan mengenakan apron resmi dan name tag bertali ungu selama jam operasional. Tim logistik juga diimbau memakai sarung tangan kerja saat proses bongkar muat barang di gudang hub.', 
+        author: 'Manajemen Operasional', 
+        created_at: new Date(Date.now() - 4 * 86400000).toISOString() 
+      },
+      { 
+        id: 'pgm-3', 
+        judul: 'Jadwal Libur Bersama & Penyesuaian Shift Toko', 
+        kategori: 'Hari Libur',
+        isi: 'Toko Suryatokoku tetap melayani pelanggan selama libur nasional dengan sistem shift rotasi tim. Bagi karyawan yang terjadwal piket kerja pada hari libur, akan memperoleh kompensasi insentif dan hak libur pengganti yang otomatis tercatat pada Master Libur & Cuti.', 
+        author: 'HRD Suryatokoku', 
+        created_at: new Date(Date.now() - 8 * 86400000).toISOString() 
+      },
+      { 
+        id: 'pgm-4', 
+        judul: 'Sosialisasi Program Jaminan Kesehatan & Ketenagakerjaan', 
+        kategori: 'Informasi Umum',
+        isi: 'Departemen HR akan mengadakan sesi webinar singkat mengenai tata cara klaim manfaat perlindungan tenaga kerja pada hari Jumat pukul 14:00 WIB. Tautan ruang rapat daring akan dibagikan via grup WhatsApp operasional.', 
+        author: 'Staf HRD', 
+        created_at: new Date(Date.now() - 12 * 86400000).toISOString() 
+      }
+    ];
+
+    const INITIAL_ADMINS = [
+      { id: 'adm-01', nama_lengkap: 'Super Admin HR', username: 'admin', password: '123', email: 'admin@suryatokoku.com', role: 'Super Administrator' },
+      { id: 'adm-02', nama_lengkap: 'Staf HRD', username: 'hrd_staff', password: '123', email: 'hrd@suryatokoku.com', role: 'Staf HRD' }
+    ];
+
+    // Data dummy presensi multi-hari untuk pengujian Rekapan 26-25
+    const generateInitialPresensi = () => {
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yStr = yesterday.toISOString().split('T')[0];
+
+      const twoDaysAgo = new Date(today);
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+      const twoStr = twoDaysAgo.toISOString().split('T')[0];
+
+      return [
+        {
+          id: 'prs-001',
+          karyawan_id: 'kry-001',
+          karyawan_nama: 'Budi Pratama, S.Kom',
+          divisi: 'Teknologi & IT',
+          tipe: 'masuk',
+          status: 'Hadir',
+          shift_nama: 'Pagi (08:00 - 17:00)',
+          lokasi_nama: 'Kantor Pusat Suryatokoku',
+          latitude: -6.9175,
+          longitude: 107.6191,
+          foto_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+          keterangan: 'Tepat waktu',
+          tanggal: todayStr,
+          jam: '07:55:12',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'prs-002',
+          karyawan_id: 'kry-001',
+          karyawan_nama: 'Budi Pratama, S.Kom',
+          divisi: 'Teknologi & IT',
+          tipe: 'keluar',
+          status: 'Pulang',
+          shift_nama: 'Pagi (08:00 - 17:00)',
+          lokasi_nama: 'Kantor Pusat Suryatokoku',
+          latitude: -6.9175,
+          longitude: 107.6191,
+          foto_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+          keterangan: 'Pulang tepat waktu',
+          tanggal: todayStr,
+          jam: '17:05:40',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'prs-003',
+          karyawan_id: 'kry-001',
+          karyawan_nama: 'Budi Pratama, S.Kom',
+          divisi: 'Teknologi & IT',
+          tipe: 'masuk',
+          status: 'Terlambat',
+          shift_nama: 'Pagi (08:00 - 17:00)',
+          lokasi_nama: 'Kantor Pusat Suryatokoku',
+          latitude: -6.9175,
+          longitude: 107.6191,
+          foto_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+          keterangan: 'Kepadatan lalu lintas',
+          tanggal: yStr,
+          jam: '08:22:10',
+          created_at: new Date(yesterday).toISOString()
+        },
+        {
+          id: 'prs-004',
+          karyawan_id: 'kry-002',
+          karyawan_nama: 'Siti Sarah Rahmawati',
+          divisi: 'Operasional Toko',
+          tipe: 'masuk',
+          status: 'Hadir',
+          shift_nama: 'Pagi (08:00 - 17:00)',
+          lokasi_nama: 'Kantor Pusat Suryatokoku',
+          latitude: -6.9175,
+          longitude: 107.6191,
+          foto_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+          keterangan: 'Tepat waktu',
+          tanggal: todayStr,
+          jam: '07:48:30',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'prs-005',
+          karyawan_id: 'kry-002',
+          karyawan_nama: 'Siti Sarah Rahmawati',
+          divisi: 'Operasional Toko',
+          tipe: 'masuk',
+          status: 'Libur',
+          shift_nama: 'Reguler',
+          lokasi_nama: 'Jadwal Libur Mingguan',
+          latitude: 0,
+          longitude: 0,
+          foto_url: '',
+          keterangan: 'Libur terjadwal',
+          tanggal: yStr,
+          jam: '08:00:00',
+          created_at: new Date(yesterday).toISOString()
+        },
+        {
+          id: 'prs-006',
+          karyawan_id: 'kry-003',
+          karyawan_nama: 'Ahmad Faisal',
+          divisi: 'Logistik & Gudang',
+          tipe: 'masuk',
+          status: 'Sakit',
+          shift_nama: 'Pagi (08:00 - 17:00)',
+          lokasi_nama: 'Izin Mandiri',
+          latitude: 0,
+          longitude: 0,
+          foto_url: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=400&q=80',
+          keterangan: 'Flu dan demam (Surat dokter terlampir)',
+          tanggal: todayStr,
+          jam: '08:00:00',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'prs-007',
+          karyawan_id: 'kry-003',
+          karyawan_nama: 'Ahmad Faisal',
+          divisi: 'Logistik & Gudang',
+          tipe: 'masuk',
+          status: 'Hadir',
+          shift_nama: 'Pagi (08:00 - 17:00)',
+          lokasi_nama: 'Gudang Hub Cirebon',
+          latitude: -6.7063,
+          longitude: 108.5570,
+          foto_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
+          keterangan: 'Tepat waktu',
+          tanggal: twoStr,
+          jam: '07:50:00',
+          created_at: new Date(twoDaysAgo).toISOString()
+        }
+      ];
+    };
+
+    // Data dummy pengajuan lembur karyawan
+    const INITIAL_LEMBUR = [
+      {
+        id: 'lmb-01',
+        karyawan_id: 'kry-001',
+        karyawan_nama: 'Budi Pratama, S.Kom',
+        divisi: 'Teknologi & IT',
+        tanggal: new Date().toISOString().split('T')[0],
+        durasi_jam: 3,
+        keterangan: 'Deployment patch sistem database & sinkronisasi API inventory toko.',
+        bukti_url: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=500&q=80',
+        status: 'Pending',
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 'lmb-02',
+        karyawan_id: 'kry-003',
+        karyawan_nama: 'Ahmad Faisal',
+        divisi: 'Logistik & Gudang',
+        tanggal: (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0]; })(),
+        durasi_jam: 2.5,
+        keterangan: 'Bongkar muat pasokan stok barang impor masuk ke Hub Cirebon.',
+        bukti_url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=500&q=80',
+        status: 'Approved',
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 'lmb-03',
+        karyawan_id: 'kry-002',
+        karyawan_nama: 'Siti Sarah Rahmawati',
+        divisi: 'Operasional Toko',
+        tanggal: (() => { const d = new Date(); d.setDate(d.getDate() - 2); return d.toISOString().split('T')[0]; })(),
+        durasi_jam: 1.5,
+        keterangan: 'Stock opname barang kasir dan penutupan shift bulanan.',
+        bukti_url: '',
+        status: 'Rejected',
+        created_at: new Date().toISOString()
+      }
+    ];
+
     function App() {
       const [currentRoute, setCurrentRoute] = useState(window.location.hash || '#karyawan');
     
-      // Auth Session State
-      const [authSession, setAuthSession] = useState(() => {
-        const saved = localStorage.getItem('suryatokoku_session');
-        return saved ? JSON.parse(saved) : null;
-      });
+    // Auth Session State
+    const [authSession, setAuthSession] = useState(() => {
+      const saved = localStorage.getItem('suryatokoku_session');
+      return saved ? JSON.parse(saved) : null;
+    });
 
-      const [currentUser, setCurrentUser] = useState(() => {
-        const savedUser = localStorage.getItem('suryatokoku_user');
-        if (savedUser) return JSON.parse(savedUser);
-        return null;
-      });
+    const [currentUser, setCurrentUser] = useState(() => {
+      const savedUser = localStorage.getItem('suryatokoku_user');
+      if (savedUser) return JSON.parse(savedUser);
+      return null;
+    });
 
-      const [isAdmin, setIsAdmin] = useState(() => {
-        return localStorage.getItem('suryatokoku_is_admin') === 'true';
-      });
+    const [isAdmin, setIsAdmin] = useState(() => {
+      return localStorage.getItem('suryatokoku_is_admin') === 'true';
+    });
 
-      // State Data Master & Transaksi (Murni dari Database Supabase)
-      const [karyawanList, setKaryawanList] = useState([]);
-      const [lokasiList, setLokasiList] = useState([]);
-      const [divisiList, setDivisiList] = useState([]);
-      const [jabatanList, setJabatanList] = useState([]);
-      const [shiftList, setShiftList] = useState([]);
-      const [pengumumanList, setPengumumanList] = useState([]);
-      const [adminList, setAdminList] = useState([]);
-      const [toleransiMenit, setToleransiMenit] = useState(15);
+    const [karyawanList, setKaryawanList] = useState(INITIAL_KARYAWAN);
+    const [lokasiList, setLokasiList] = useState(INITIAL_LOKASI);
+    const [divisiList, setDivisiList] = useState(INITIAL_DIVISI);
+    const [jabatanList, setJabatanList] = useState(INITIAL_JABATAN);
+    const [shiftList, setShiftList] = useState(INITIAL_SHIFTS);
+    const [pengumumanList, setPengumumanList] = useState(INITIAL_PENGUMUMAN);
+    const [adminList, setAdminList] = useState(INITIAL_ADMINS);
+    const [toleransiMenit, setToleransiMenit] = useState(15);
       
-      const [presensiList, setPresensiList] = useState([]);
-      const [lemburList, setLemburList] = useState([]);
-      const [klaimList, setKlaimList] = useState([]);
-      const [isLoadingData, setIsLoadingData] = useState(true);
-      const [toast, setToast] = useState(null);
-      const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+    const [presensiList, setPresensiList] = useState(generateInitialPresensi);
+    const [lemburList, setLemburList] = useState(INITIAL_LEMBUR);
+    const [klaimList, setKlaimList] = useState([]);
+    const [toast, setToast] = useState(null);
+    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+    const [isLoadingData, setIsLoadingData] = useState(false);
 
-      const showToast = (message, type = 'success') => {
-        setToast({ message, type, id: Date.now() });
-        playNotificationSound(type);
-        setTimeout(() => setToast(null), 3500);
-      };
+    // Sinkronisasi data awal dari Supabase
+    useEffect(() => {
+      if (!supabase) return;
 
-      // Fungsi Pengambilan Seluruh Data dari Supabase
-      const fetchAllDataFromSupabase = async () => {
-        if (!supabase) {
-          setIsLoadingData(false);
-          return;
-        }
-
+      const fetchAllFromSupabase = async () => {
+        setIsLoadingData(true);
         try {
-          setIsLoadingData(true);
-          const [
-            karyawanRes,
-            lokasiRes,
-            divisiRes,
-            jabatanRes,
-            shiftRes,
-            pengumumanRes,
-            adminRes,
-            presensiRes,
-            lemburRes,
-            klaimRes,
-            settingsRes
-          ] = await Promise.all([
-            supabase.from('master_karyawan').select('*').order('nama_lengkap', { ascending: true }),
-            supabase.from('master_lokasi').select('*').order('nama_lokasi', { ascending: true }),
-            supabase.from('master_divisi').select('*').order('nama_divisi', { ascending: true }),
-            supabase.from('master_jabatan').select('*').order('nama_jabatan', { ascending: true }),
-            supabase.from('master_shift').select('*').order('nama_shift', { ascending: true }),
-            supabase.from('pengumuman').select('*').order('created_at', { ascending: false }),
-            supabase.from('master_admin').select('*').order('nama_lengkap', { ascending: true }),
-            supabase.from('presensi').select('*').order('tanggal', { ascending: false }),
-            supabase.from('pengajuan_lembur').select('*').order('tanggal', { ascending: false }),
-            supabase.from('klaim_kehadiran').select('*').order('created_at', { ascending: false }),
-            supabase.from('settings').select('*')
-          ]);
-
-          if (karyawanRes.data) setKaryawanList(karyawanRes.data);
-          if (lokasiRes.data) setLokasiList(lokasiRes.data);
-          if (divisiRes.data) setDivisiList(divisiRes.data);
-          if (jabatanRes.data) setJabatanList(jabatanRes.data);
-          if (shiftRes.data) setShiftList(shiftRes.data);
-          if (pengumumanRes.data) setPengumumanList(pengumumanRes.data);
-          if (adminRes.data) setAdminList(adminRes.data);
-          if (presensiRes.data) setPresensiList(presensiRes.data);
-          if (lemburRes.data) setLemburList(lemburRes.data);
-          if (klaimRes.data) setKlaimList(klaimRes.data);
-
-          if (settingsRes.data) {
-            const tol = settingsRes.data.find(s => s.key === 'toleransi_menit');
-            if (tol && tol.value) setToleransiMenit(Number(tol.value));
+          // 1. Master Karyawan
+          const { data: kryData, error: kryErr } = await supabase.from('master_karyawan').select('*');
+          if (!kryErr && kryData && kryData.length > 0) {
+            setKaryawanList(kryData);
           }
-        } catch (error) {
-          console.error("Error fetching data from Supabase:", error);
-          showToast("Gagal memuat data dari Supabase", "error");
+
+          // 2. Master Lokasi
+          const { data: lokData, error: lokErr } = await supabase.from('master_lokasi').select('*');
+          if (!lokErr && lokData && lokData.length > 0) {
+            setLokasiList(lokData);
+          }
+
+          // 3. Master Divisi
+          const { data: divData, error: divErr } = await supabase.from('master_divisi').select('*');
+          if (!divErr && divData && divData.length > 0) {
+            setDivisiList(divData);
+          }
+
+          // 4. Master Jabatan
+          const { data: jabData, error: jabErr } = await supabase.from('master_jabatan').select('*');
+          if (!jabErr && jabData && jabData.length > 0) {
+            setJabatanList(jabData);
+          }
+
+          // 5. Master Shift
+          const { data: shData, error: shErr } = await supabase.from('master_shift').select('*');
+          if (!shErr && shData && shData.length > 0) {
+            setShiftList(shData);
+          }
+
+          // 6. Master Admin
+          const { data: admData, error: admErr } = await supabase.from('master_admin').select('*');
+          if (!admErr && admData && admData.length > 0) {
+            setAdminList(admData);
+          }
+
+          // 7. Pengumuman
+          const { data: pgmData, error: pgmErr } = await supabase.from('pengumuman').select('*').order('created_at', { ascending: false });
+          if (!pgmErr && pgmData && pgmData.length > 0) {
+            setPengumumanList(pgmData);
+          }
+
+          // 8. Presensi Transaksi
+          const { data: prsData, error: prsErr } = await supabase.from('presensi').select('*').order('created_at', { ascending: false });
+          if (!prsErr && prsData && prsData.length > 0) {
+            setPresensiList(prsData);
+          }
+
+          // 9. Pengajuan Lembur
+          const { data: lmbData, error: lmbErr } = await supabase.from('pengajuan_lembur').select('*').order('created_at', { ascending: false });
+          if (!lmbErr && lmbData && lmbData.length > 0) {
+            setLemburList(lmbData);
+          }
+
+          // 10. Klaim Kehadiran
+          const { data: klmData, error: klmErr } = await supabase.from('klaim_kehadiran').select('*');
+          if (!klmErr && klmData && klmData.length > 0) {
+            setKlaimList(klmData);
+          }
+
+          // 11. Pengaturan Toleransi
+          const { data: setToleransi } = await supabase.from('settings').select('value').eq('key', 'toleransi_menit').single();
+          if (setToleransi && setToleransi.value) {
+            setToleransiMenit(Number(setToleransi.value));
+          }
+        } catch (err) {
+          console.warn("Gagal memuat data dari Supabase:", err);
         } finally {
           setIsLoadingData(false);
         }
       };
 
-      useEffect(() => {
-        fetchAllDataFromSupabase();
-      }, []);
+      fetchAllFromSupabase();
+    }, []);
 
-      useEffect(() => {
-        const handleHashChange = () => {
-          setCurrentRoute(window.location.hash || '#karyawan');
-        };
-        window.addEventListener('hashchange', handleHashChange);
-        return () => window.removeEventListener('hashchange', handleHashChange);
-      }, []);
+    const showToast = (message, type = 'success') => {
+      setToast({ message, type, id: Date.now() });
+      playNotificationSound(type);
+      setTimeout(() => setToast(null), 3500);
+    };
 
-      const navigateTo = (hash) => {
-        window.location.hash = hash;
-        setCurrentRoute(hash);
+    useEffect(() => {
+      const handleHashChange = () => {
+        setCurrentRoute(window.location.hash || '#karyawan');
       };
+      window.addEventListener('hashchange', handleHashChange);
+      return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
 
-      const isDashboardRoute = currentRoute.startsWith('#dashboard');
+    const navigateTo = (hash) => {
+      window.location.hash = hash;
+      setCurrentRoute(hash);
+    };
 
-      const handleLoginKaryawan = (identifier, password) => {
-        const trimmedId = identifier.trim().toLowerCase();
-        const user = karyawanList.find(k => 
-          (k.username?.toLowerCase() === trimmedId || 
-           k.no_wa === trimmedId || 
-           k.email?.toLowerCase() === trimmedId) && 
-          k.password === password
-        );
+    const isDashboardRoute = currentRoute.startsWith('#dashboard');
 
-        if (user) {
-          setCurrentUser(user);
-          setIsAdmin(false);
-          setAuthSession({ type: 'karyawan', id: user.id });
-          localStorage.setItem('suryatokoku_user', JSON.stringify(user));
-          localStorage.setItem('suryatokoku_session', JSON.stringify({ type: 'karyawan', id: user.id }));
-          localStorage.setItem('suryatokoku_is_admin', 'false');
-          navigateTo('#karyawan');
-          showToast(`Selamat datang, ${user.nama_lengkap}!`);
-          return { success: true };
-        } else {
-          showToast('Username/No.WA/Email atau password salah!', 'error');
-          return { success: false, message: 'Kredensial tidak cocok' };
-        }
-      };
-
-      const handleLoginAdmin = (identifier, password) => {
-        const trimmedId = identifier.trim().toLowerCase();
-        const admin = adminList.find(a => 
-          (a.username?.toLowerCase() === trimmedId || a.email?.toLowerCase() === trimmedId) && 
-          a.password === password
-        );
-
-        if (admin) {
-          setIsAdmin(true);
-          setCurrentUser(admin);
-          setAuthSession({ type: 'admin', id: admin.id });
-          localStorage.setItem('suryatokoku_user', JSON.stringify(admin));
-          localStorage.setItem('suryatokoku_session', JSON.stringify({ type: 'admin', id: admin.id }));
-          localStorage.setItem('suryatokoku_is_admin', 'true');
-          navigateTo('#dashboard');
-          showToast(`Selamat datang di Workspace HR, ${admin.nama_lengkap}!`);
-          return { success: true };
-        } else {
-          showToast('Username/Email Admin atau password salah!', 'error');
-          return { success: false, message: 'Kredensial Admin tidak cocok' };
-        }
-      };
-
-      const handleLogout = () => {
-        setShowLogoutConfirm(true);
-      };
-
-      const confirmLogout = () => {
-        localStorage.removeItem('suryatokoku_user');
-        localStorage.removeItem('suryatokoku_session');
-        localStorage.removeItem('suryatokoku_is_admin');
-        const wasAdmin = isAdmin;
-        setCurrentUser(null);
-        setAuthSession(null);
-        setIsAdmin(false);
-        setShowLogoutConfirm(false);
-        if (wasAdmin) {
-          navigateTo('#dashboard');
-        } else {
-          navigateTo('#karyawan');
-        }
-        showToast('Anda telah berhasil keluar sistem.');
-      };
-
-      // Validasi apakah sesi saat ini sesuai dengan portal yang sedang dibuka
-      const isEmployeeAuthenticated = authSession?.type === 'karyawan' && currentUser && !isAdmin;
-      const isAdminAuthenticated = authSession?.type === 'admin' && currentUser && isAdmin;
-
-      return (
-        <div className="min-h-screen flex flex-col justify-between">
-          {/* Top Navigation Bar */}
-          <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
-            {/* Brand Logo */}
-            <div 
-              onClick={() => navigateTo(isDashboardRoute ? '#dashboard' : '#karyawan')}
-              className="flex items-center space-x-2 cursor-pointer select-none"
-            >
-              <img src="Logo Surtok.png" alt="Logo Suryatokoku" className="w-7 h-7 object-contain rounded-lg drop-shadow-xs" />
-              <div className="flex flex-col">
-                <span className="font-extrabold tracking-tight font-display bg-clip-text text-transparent bg-gradient-to-r from-violet-600 to-fuchsia-600 text-xs sm:text-sm">
-                  SURYATOKOKU HR
-                </span>
-                <span className="text-[9px] text-slate-400 font-semibold hidden sm:inline -mt-0.5">
-                  {isDashboardRoute ? 'Admin HR Workspace' : 'Employee Portal'}
-                </span>
-              </div>
-            </div>
-
-            {/* Switcher Tabs Navigasi: Akses Karyawan vs Admin (#dashboard) */}
-            <div className="flex items-center bg-slate-100 p-1 rounded-full border border-slate-200/80 shadow-inner">
-              <button
-                type="button"
-                onClick={() => navigateTo('#karyawan')}
-                className={`px-3 sm:px-4 py-1.5 rounded-full text-[11px] font-bold transition flex items-center gap-1.5 ${
-                  !isDashboardRoute
-                    ? 'bg-white text-violet-700 shadow-sm border border-slate-200/60'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <i className="fa-solid fa-mobile-screen text-xs"></i>
-                <span>Karyawan</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navigateTo('#dashboard')}
-                className={`px-3 sm:px-4 py-1.5 rounded-full text-[11px] font-bold transition flex items-center gap-1.5 ${
-                  isDashboardRoute
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <i className="fa-solid fa-shield-halved text-xs"></i>
-                <span>Admin</span>
-                <span className={`text-[9px] font-mono-numbers px-1.5 py-0.2 rounded-md ${isDashboardRoute ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                  #dashboard
-                </span>
-              </button>
-            </div>
-
-            {/* User Status / Logout Button */}
-            <div className="flex items-center space-x-2">
-              {(isDashboardRoute ? isAdminAuthenticated : isEmployeeAuthenticated) ? (
-                <>
-                  <span className="text-[11px] font-bold text-slate-600 hidden md:inline truncate max-w-[140px]">
-                    <i className="fa-regular fa-user mr-1 text-violet-500"></i>{currentUser.nama_lengkap}
-                  </span>
-                  <button 
-                    onClick={handleLogout}
-                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 active:scale-95 font-bold rounded-full transition flex items-center gap-1 text-[11px] border border-rose-200 shadow-xs"
-                    title="Keluar dari sesi ini"
-                  >
-                    <i className="fa-solid fa-arrow-right-from-bracket text-xs"></i>
-                    <span className="hidden sm:inline">Keluar</span>
-                  </button>
-                </>
-              ) : (
-                <span className="px-2.5 py-1 bg-amber-50 border border-amber-200/80 rounded-full text-[10px] font-bold text-amber-700 hidden sm:flex items-center gap-1">
-                  <i className="fa-solid fa-lock text-[9px]"></i>
-                  <span>Silakan Masuk</span>
-                </span>
-              )}
-            </div>
-          </header>
-
-          {/* Indikator Konfigurasi Supabase jika belum disetel */}
-          {(!SUPABASE_URL || SUPABASE_URL.includes("your-supabase-project")) && (
-            <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-center text-xs font-semibold text-amber-800 flex items-center justify-center gap-2">
-              <i className="fa-solid fa-triangle-exclamation text-amber-600"></i>
-              <span>Supabase belum terhubung. Harap isi <b>SUPABASE_URL</b> & <b>SUPABASE_ANON_KEY</b> di kode <code>index.html</code>.</span>
-            </div>
-          )}
-
-          {/* Main Content */}
-          <main className="flex-1 relative z-10">
-            {isLoadingData ? (
-              <div className="min-h-[50vh] flex flex-col items-center justify-center space-y-3 text-slate-500">
-                <i className="fa-solid fa-circle-notch fa-spin text-3xl text-violet-600"></i>
-                <span className="text-xs font-bold">Menghubungkan ke Database Supabase...</span>
-              </div>
-            ) : isDashboardRoute ? (
-              isAdminAuthenticated ? (
-                <AdminDashboard 
-                  karyawanList={karyawanList}
-                  setKaryawanList={setKaryawanList}
-                  presensiList={presensiList}
-                  setPresensiList={setPresensiList}
-                  lokasiList={lokasiList}
-                  setLokasiList={setLokasiList}
-                  divisiList={divisiList}
-                  setDivisiList={setDivisiList}
-                  jabatanList={jabatanList}
-                  setJabatanList={setJabatanList}
-                  shiftList={shiftList}
-                  setShiftList={setShiftList}
-                  pengumumanList={pengumumanList}
-                  setPengumumanList={setPengumumanList}
-                  adminList={adminList}
-                  setAdminList={setAdminList}
-                  lemburList={lemburList}
-                  setLemburList={setLemburList}
-                  klaimList={klaimList}
-                  setKlaimList={setKlaimList}
-                  toleransiMenit={toleransiMenit}
-                  setToleransiMenit={setToleransiMenit}
-                  showToast={showToast}
-                  handleLogout={handleLogout}
-                  supabase={supabase}
-                />
-              ) : (
-                <AuthPortalView 
-                  forcedRole="admin"
-                  onLoginKaryawan={handleLoginKaryawan}
-                  onLoginAdmin={handleLoginAdmin}
-                  showToast={showToast}
-                />
-              )
-            ) : (
-              isEmployeeAuthenticated ? (
-                <KaryawanPortal 
-                  currentUser={currentUser}
-                  setCurrentUser={setCurrentUser}
-                  karyawanList={karyawanList}
-                  presensiList={presensiList}
-                  setPresensiList={setPresensiList}
-                  lokasiList={lokasiList}
-                  divisiList={divisiList}
-                  shiftList={shiftList}
-                  pengumumanList={pengumumanList}
-                  lemburList={lemburList}
-                  setLemburList={setLemburList}
-                  klaimList={klaimList}
-                  setKlaimList={setKlaimList}
-                  toleransiMenit={toleransiMenit}
-                  currentRoute={currentRoute}
-                  navigateTo={navigateTo}
-                  showToast={showToast}
-                  handleLogout={handleLogout}
-                  supabase={supabase}
-                />
-              ) : (
-                <AuthPortalView 
-                  forcedRole="karyawan"
-                  onLoginKaryawan={handleLoginKaryawan}
-                  onLoginAdmin={handleLoginAdmin}
-                  showToast={showToast}
-                />
-              )
-            )}
-          </main>
-
-          {/* Modal Konfirmasi Logout */}
-          {showLogoutConfirm && (
-            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-[2rem] max-w-xs w-full p-6 text-center shadow-2xl border border-slate-100">
-                <div className="w-14 h-14 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4">
-                  <i className="fa-solid fa-arrow-right-from-bracket text-2xl"></i>
-                </div>
-                <h3 className="font-display font-bold text-base text-slate-800">Keluar Sistem?</h3>
-                <p className="text-xs text-slate-500 mt-1 mb-5">
-                  Sesi aktif atas nama <span className="font-bold text-slate-700">{currentUser?.nama_lengkap}</span> akan diakhiri.
-                </p>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => setShowLogoutConfirm(false)}
-                    className="w-1/2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-full transition"
-                  >
-                    Batal
-                  </button>
-                  <button 
-                    onClick={confirmLogout}
-                    className="w-1/2 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-full transition shadow-md active:scale-95"
-                  >
-                    Ya, Keluar
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Toast Notification Modern */}
-          {toast && (
-            <div className="fixed top-16 right-5 z-50 flex items-center space-x-3 bg-white/95 backdrop-blur-xl text-slate-800 px-5 py-3.5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-100 animate-bounce">
-              <i className={`fa-solid ${toast.type === 'success' ? 'fa-circle-check text-emerald-500' : 'fa-circle-exclamation text-rose-500'} text-xl`}></i>
-              <div className="text-sm font-semibold pr-2">{toast.message}</div>
-              <button onClick={() => setToast(null)} className="text-slate-400 hover:text-slate-600">
-                <i className="fa-solid fa-xmark"></i>
-              </button>
-            </div>
-          )}
-        </div>
+    const handleLoginKaryawan = (identifier, password) => {
+      const trimmedId = identifier.trim().toLowerCase();
+      const user = karyawanList.find(k => 
+        (k.username.toLowerCase() === trimmedId || 
+         k.no_wa === trimmedId || 
+         k.email.toLowerCase() === trimmedId) && 
+        k.password === password
       );
-    }
 
-    /* =========================================================
-       KOMPONEN HALAMAN LOGIN (PORTAL KARYAWAN & ADMIN HRD)
-       ========================================================= */
-    function AuthPortalView({ forcedRole = 'karyawan', onLoginKaryawan, onLoginAdmin, showToast }) {
-      const [identifier, setIdentifier] = useState('');
-      const [password, setPassword] = useState('');
-      const [showPassword, setShowPassword] = useState(false);
-      const [isLoading, setIsLoading] = useState(false);
+      if (user) {
+        setCurrentUser(user);
+        setIsAdmin(false);
+        setAuthSession({ type: 'karyawan', id: user.id });
+        localStorage.setItem('suryatokoku_user', JSON.stringify(user));
+        localStorage.setItem('suryatokoku_session', JSON.stringify({ type: 'karyawan', id: user.id }));
+        localStorage.setItem('suryatokoku_is_admin', 'false');
+        navigateTo('#karyawan');
+        showToast(`Selamat datang, ${user.nama_lengkap}!`);
+        return { success: true };
+      } else {
+        showToast('Username/No.WA/Email atau password salah!', 'error');
+        return { success: false, message: 'Kredensial tidak cocok' };
+      }
+    };
 
-      const loginRole = forcedRole;
+    const handleLoginAdmin = (identifier, password) => {
+      const trimmedId = identifier.trim().toLowerCase();
+      const admin = adminList.find(a => 
+        (a.username.toLowerCase() === trimmedId || a.email.toLowerCase() === trimmedId) && 
+        a.password === password
+      );
 
-      const handleSubmit = (e) => {
-        e.preventDefault();
-        if (!identifier.trim() || !password.trim()) {
-          showToast('Harap isi semua kolom login', 'error');
-          return;
-        }
+      if (admin) {
+        setIsAdmin(true);
+        setCurrentUser(admin);
+        setAuthSession({ type: 'admin', id: admin.id });
+        localStorage.setItem('suryatokoku_user', JSON.stringify(admin));
+        localStorage.setItem('suryatokoku_session', JSON.stringify({ type: 'admin', id: admin.id }));
+        localStorage.setItem('suryatokoku_is_admin', 'true');
+        navigateTo('#dashboard');
+        showToast(`Selamat datang di Workspace HR, ${admin.nama_lengkap}!`);
+        return { success: true };
+      } else {
+        showToast('Username/Email Admin atau password salah!', 'error');
+        return { success: false, message: 'Kredensial Admin tidak cocok' };
+      }
+    };
 
-        setIsLoading(true);
-        setTimeout(() => {
-          setIsLoading(false);
-          if (loginRole === 'karyawan') {
-            onLoginKaryawan(identifier, password);
-          } else {
-            onLoginAdmin(identifier, password);
-          }
-        }, 500);
-      };
+    const handleLogout = () => {
+      setShowLogoutConfirm(true);
+    };
 
-      return (
-        <div className="min-h-[calc(100vh-60px)] flex items-center justify-center p-4 sm:p-6 relative z-10">
-          <div className="max-w-md w-full bg-white/90 backdrop-blur-2xl rounded-[2.5rem] p-7 sm:p-9 border border-white/60 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.08)] relative overflow-hidden">
-            
-            {/* Logo & Header Title */}
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 mx-auto mb-3.5 flex items-center justify-center bg-white rounded-2xl p-2 shadow-md border border-slate-100">
-                <img src="Logo Surtok.png" alt="Logo Suryatokoku" className="w-full h-full object-contain" />
-              </div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold mb-2 border uppercase tracking-wider bg-slate-50 text-slate-600 border-slate-200">
-                <span className={`w-2 h-2 rounded-full ${loginRole === 'admin' ? 'bg-indigo-600' : 'bg-violet-600'}`}></span>
-                {loginRole === 'admin' ? 'Login Administrator HR' : 'Login Portal Karyawan'}
-              </div>
-              <h2 className="font-display font-extrabold text-2xl text-slate-800 tracking-tight">
-                {loginRole === 'admin' ? 'WORKSPACE HRD' : 'SURYATOKOKU'}
-              </h2>
-              <p className="text-xs text-slate-500 font-medium mt-1">
-                {loginRole === 'admin' 
-                  ? 'Akses panel administrasi rekapan & master data' 
-                  : 'Presensi digital, cuti, libur & riwayat kehadiran'}
-              </p>
-            </div>
+    const confirmLogout = () => {
+      localStorage.removeItem('suryatokoku_user');
+      localStorage.removeItem('suryatokoku_session');
+      localStorage.removeItem('suryatokoku_is_admin');
+      const wasAdmin = isAdmin;
+      setCurrentUser(null);
+      setAuthSession(null);
+      setIsAdmin(false);
+      setShowLogoutConfirm(false);
+      if (wasAdmin) {
+        navigateTo('#dashboard');
+      } else {
+        navigateTo('#karyawan');
+      }
+      showToast('Anda telah berhasil keluar sistem.');
+    };
 
-            {/* Form Login */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="text-[11px] font-bold text-slate-500 block mb-1.5 ml-1">
-                  {loginRole === 'karyawan' ? 'Username / No. WhatsApp / Email' : 'Username / Email Administrator'}
-                </label>
-                <div className="relative">
-                  <i className="fa-regular fa-user absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder={loginRole === 'karyawan' ? "Contoh: budi atau 081234567890" : "Contoh: admin atau hrd@suryatokoku.com"}
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl pl-10 pr-4 py-3.5 font-bold text-slate-700 outline-none focus:border-violet-500 focus:bg-white transition"
-                  />
-                </div>
-              </div>
+    // Validasi apakah sesi saat ini sesuai dengan portal yang sedang dibuka
+    const isEmployeeAuthenticated = authSession?.type === 'karyawan' && currentUser && !isAdmin;
+    const isAdminAuthenticated = authSession?.type === 'admin' && currentUser && isAdmin;
 
-              <div>
-                <div className="flex justify-between items-center mb-1.5 ml-1">
-                  <label className="text-[11px] font-bold text-slate-500">Kata Sandi</label>
-                  <span className="text-[10px] text-violet-600 font-semibold cursor-pointer" onClick={() => showToast('Hubungi Administrator untuk reset sandi.', 'info')}>
-                    Lupa Sandi?
-                  </span>
-                </div>
-                <div className="relative">
-                  <i className="fa-solid fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                  <input 
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    placeholder="Masukkan kata sandi akun..."
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl pl-10 pr-11 py-3.5 font-bold text-slate-700 outline-none focus:border-violet-500 focus:bg-white transition font-mono-numbers"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
-                  >
-                    <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
-                  </button>
-                </div>
-              </div>
-
-              <button 
-                type="submit"
-                disabled={isLoading}
-                className={`w-full py-3.5 mt-2 text-white rounded-2xl font-bold text-xs shadow-lg active:scale-95 transition flex items-center justify-center gap-2 ${
-                  loginRole === 'admin' 
-                    ? 'bg-slate-900 hover:bg-slate-800 shadow-slate-300' 
-                    : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 shadow-violet-200'
-                }`}
-              >
-                {isLoading ? (
-                  <>
-                    <i className="fa-solid fa-circle-notch fa-spin text-sm"></i>
-                    <span>Memverifikasi...</span>
-                  </>
-                ) : (
-                  <>
-                    <i className="fa-solid fa-right-to-bracket text-xs"></i>
-                    <span>Masuk Sebagai {loginRole === 'karyawan' ? 'Karyawan' : 'Admin HR'}</span>
-                  </>
-                )}
-              </button>
-            </form>
-
-            <div className="mt-5 text-center">
-              <span className="text-[10px] text-slate-400">
-                Terhubung langsung ke Cloud Database Supabase & Google Drive Storage.
+    return (
+      <div className="min-h-screen flex flex-col justify-between">
+        {/* Top Navigation Bar: Ditampilkan kembali */}
+        <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
+          {/* Brand Logo */}
+          <div 
+            onClick={() => navigateTo(isDashboardRoute ? '#dashboard' : '#karyawan')}
+            className="flex items-center space-x-2 cursor-pointer select-none"
+          >
+            <img src="Logo Surtok.png" alt="Logo Suryatokoku" className="w-7 h-7 object-contain rounded-lg drop-shadow-xs" />
+            <div className="flex flex-col">
+              <span className="font-extrabold tracking-tight font-display bg-clip-text text-transparent bg-gradient-to-r from-violet-600 to-fuchsia-600 text-xs sm:text-sm">
+                SURYATOKOKU HR
+              </span>
+              <span className="text-[9px] text-slate-400 font-semibold hidden sm:inline -mt-0.5">
+                {isDashboardRoute ? 'Admin HR Workspace' : 'Employee Portal'}
               </span>
             </div>
-
           </div>
+
+          {/* Switcher Tabs Navigasi: Akses Karyawan vs Admin (#dashboard) */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-full border border-slate-200/80 shadow-inner">
+            <button
+              type="button"
+              onClick={() => navigateTo('#karyawan')}
+              className={`px-3 sm:px-4 py-1.5 rounded-full text-[11px] font-bold transition flex items-center gap-1.5 ${
+                !isDashboardRoute
+                  ? 'bg-white text-violet-700 shadow-sm border border-slate-200/60'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <i className="fa-solid fa-mobile-screen text-xs"></i>
+              <span>Karyawan</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigateTo('#dashboard')}
+              className={`px-3 sm:px-4 py-1.5 rounded-full text-[11px] font-bold transition flex items-center gap-1.5 ${
+                isDashboardRoute
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <i className="fa-solid fa-shield-halved text-xs"></i>
+              <span>Admin</span>
+              <span className={`text-[9px] font-mono-numbers px-1.5 py-0.2 rounded-md ${isDashboardRoute ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                #dashboard
+              </span>
+            </button>
+          </div>
+
+          {/* User Status / Logout Button */}
+          <div className="flex items-center space-x-2">
+            {(isDashboardRoute ? isAdminAuthenticated : isEmployeeAuthenticated) ? (
+              <>
+                <span className="text-[11px] font-bold text-slate-600 hidden md:inline truncate max-w-[140px]">
+                  <i className="fa-regular fa-user mr-1 text-violet-500"></i>{currentUser.nama_lengkap}
+                </span>
+                <button 
+                  onClick={handleLogout}
+                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 active:scale-95 font-bold rounded-full transition flex items-center gap-1 text-[11px] border border-rose-200 shadow-xs"
+                  title="Keluar dari sesi ini"
+                >
+                  <i className="fa-solid fa-arrow-right-from-bracket text-xs"></i>
+                  <span className="hidden sm:inline">Keluar</span>
+                </button>
+              </>
+            ) : (
+              <span className="px-2.5 py-1 bg-amber-50 border border-amber-200/80 rounded-full text-[10px] font-bold text-amber-700 hidden sm:flex items-center gap-1">
+                <i className="fa-solid fa-lock text-[9px]"></i>
+                <span>Silakan Masuk</span>
+              </span>
+            )}
+          </div>
+        </header>
+
+        {/* Main Content: Render portal aktif atau form login yang sesuai */}
+        <main className="flex-1 relative z-10">
+          {isDashboardRoute ? (
+            /* Rute #dashboard */
+            isAdminAuthenticated ? (
+              <AdminDashboard 
+                karyawanList={karyawanList}
+                setKaryawanList={setKaryawanList}
+                presensiList={presensiList}
+                setPresensiList={setPresensiList}
+                lokasiList={lokasiList}
+                setLokasiList={setLokasiList}
+                divisiList={divisiList}
+                setDivisiList={setDivisiList}
+                jabatanList={jabatanList}
+                setJabatanList={setJabatanList}
+                shiftList={shiftList}
+                setShiftList={setShiftList}
+                pengumumanList={pengumumanList}
+                setPengumumanList={setPengumumanList}
+                adminList={adminList}
+                setAdminList={setAdminList}
+                lemburList={lemburList}
+                setLemburList={setLemburList}
+                klaimList={klaimList}
+                setKlaimList={setKlaimList}
+                toleransiMenit={toleransiMenit}
+                setToleransiMenit={setToleransiMenit}
+                showToast={showToast}
+                handleLogout={handleLogout}
+              />
+            ) : (
+              /* Belum Login Admin pada #dashboard: Tampilkan Form Login Admin */
+              <AuthPortalView 
+                forcedRole="admin"
+                karyawanList={karyawanList}
+                adminList={adminList}
+                onLoginKaryawan={handleLoginKaryawan}
+                onLoginAdmin={handleLoginAdmin}
+                showToast={showToast}
+                navigateTo={navigateTo}
+              />
+            )
+          ) : (
+            /* Rute Karyawan (Halaman Utama / #karyawan / #profil dll) */
+            isEmployeeAuthenticated ? (
+              <KaryawanPortal 
+                currentUser={currentUser}
+                setCurrentUser={setCurrentUser}
+                karyawanList={karyawanList}
+                presensiList={presensiList}
+                setPresensiList={setPresensiList}
+                lokasiList={lokasiList}
+                divisiList={divisiList}
+                jabatanList={jabatanList}
+                shiftList={shiftList}
+                pengumumanList={pengumumanList}
+                lemburList={lemburList}
+                setLemburList={setLemburList}
+                klaimList={klaimList}
+                setKlaimList={setKlaimList}
+                toleransiMenit={toleransiMenit}
+                currentRoute={currentRoute}
+                navigateTo={navigateTo}
+                showToast={showToast}
+                handleLogout={handleLogout}
+              />
+            ) : (
+              /* Belum Login Karyawan di Halaman Utama: Tampilkan Form Login Karyawan */
+              <AuthPortalView 
+                forcedRole="karyawan"
+                karyawanList={karyawanList}
+                adminList={adminList}
+                onLoginKaryawan={handleLoginKaryawan}
+                onLoginAdmin={handleLoginAdmin}
+                showToast={showToast}
+                navigateTo={navigateTo}
+              />
+            )
+          )}
+        </main>
+
+        {/* Modal Konfirmasi Logout yang Ramah Pengguna */}
+        {showLogoutConfirm && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-[2rem] max-w-xs w-full p-6 text-center shadow-2xl border border-slate-100">
+              <div className="w-14 h-14 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4">
+                <i className="fa-solid fa-arrow-right-from-bracket text-2xl"></i>
+              </div>
+              <h3 className="font-display font-bold text-base text-slate-800">Keluar Sistem?</h3>
+              <p className="text-xs text-slate-500 mt-1 mb-5">
+                Sesi aktif atas nama <span className="font-bold text-slate-700">{currentUser?.nama_lengkap}</span> akan diakhiri.
+              </p>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="w-1/2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-full transition"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={confirmLogout}
+                  className="w-1/2 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-full transition shadow-md active:scale-95"
+                >
+                  Ya, Keluar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Toast Notification Modern */}
+        {toast && (
+          <div className="fixed top-16 right-5 z-50 flex items-center space-x-3 bg-white/95 backdrop-blur-xl text-slate-800 px-5 py-3.5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-100 animate-bounce">
+            <i className={`fa-solid ${toast.type === 'success' ? 'fa-circle-check text-emerald-500' : 'fa-circle-exclamation text-rose-500'} text-xl`}></i>
+            <div className="text-sm font-semibold pr-2">{toast.message}</div>
+            <button onClick={() => setToast(null)} className="text-slate-400 hover:text-slate-600">
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* =========================================================
+     KOMPONEN HALAMAN LOGIN (PORTAL KARYAWAN & ADMIN HRD)
+     ========================================================= */
+  function AuthPortalView({ forcedRole = 'karyawan', karyawanList, adminList, onLoginKaryawan, onLoginAdmin, showToast, navigateTo }) {
+    const [identifier, setIdentifier] = useState('');
+    const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const loginRole = forcedRole;
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      if (!identifier.trim() || !password.trim()) {
+        showToast('Harap isi semua kolom login', 'error');
+        return;
+      }
+
+      setIsLoading(true);
+      setTimeout(() => {
+        setIsLoading(false);
+        if (loginRole === 'karyawan') {
+          onLoginKaryawan(identifier, password);
+        } else {
+          onLoginAdmin(identifier, password);
+        }
+      }, 500);
+    };
+
+    // Quick Login Demo Helper
+    const applyDummyCredential = (user) => {
+      setIdentifier(user.username);
+      setPassword(user.password);
+      showToast(`Kredensial ${user.nama_lengkap} disiapkan. Silakan klik Masuk.`, 'info');
+    };
+
+    return (
+      <div className="min-h-[calc(100vh-60px)] flex items-center justify-center p-4 sm:p-6 relative z-10">
+        <div className="max-w-md w-full bg-white/90 backdrop-blur-2xl rounded-[2.5rem] p-7 sm:p-9 border border-white/60 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.08)] relative overflow-hidden">
+          
+          {/* Logo & Header Title */}
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 mx-auto mb-3.5 flex items-center justify-center bg-white rounded-2xl p-2 shadow-md border border-slate-100">
+              <img src="Logo Surtok.png" alt="Logo Suryatokoku" className="w-full h-full object-contain" />
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold mb-2 border uppercase tracking-wider bg-slate-50 text-slate-600 border-slate-200">
+              <span className={`w-2 h-2 rounded-full ${loginRole === 'admin' ? 'bg-indigo-600' : 'bg-violet-600'}`}></span>
+              {loginRole === 'admin' ? 'Login Administrator HR' : 'Login Portal Karyawan'}
+            </div>
+            <h2 className="font-display font-extrabold text-2xl text-slate-800 tracking-tight">
+              {loginRole === 'admin' ? 'WORKSPACE HRD' : 'SURYATOKOKU'}
+            </h2>
+            <p className="text-xs text-slate-500 font-medium mt-1">
+              {loginRole === 'admin' 
+                ? 'Akses panel administrasi rekapan & master data' 
+                : 'Presensi digital, cuti, libur & riwayat kehadiran'}
+            </p>
+          </div>
+
+          {/* Form Login */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="text-[11px] font-bold text-slate-500 block mb-1.5 ml-1">
+                {loginRole === 'karyawan' ? 'Username / No. WhatsApp / Email' : 'Username / Email Administrator'}
+              </label>
+              <div className="relative">
+                <i className="fa-regular fa-user absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input 
+                  type="text" 
+                  required
+                  placeholder={loginRole === 'karyawan' ? "budi atau 081234567890" : "admin atau hrd@suryatokoku.com"}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl pl-10 pr-4 py-3.5 font-bold text-slate-700 outline-none focus:border-violet-500 focus:bg-white transition"
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-1.5 ml-1">
+                <label className="text-[11px] font-bold text-slate-500">Kata Sandi</label>
+                <span className="text-[10px] text-violet-600 font-semibold cursor-pointer" onClick={() => showToast('Gunakan password demo: 123', 'info')}>
+                  Lupa Sandi?
+                </span>
+              </div>
+              <div className="relative">
+                <i className="fa-solid fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input 
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="Masukkan kata sandi..."
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl pl-10 pr-11 py-3.5 font-bold text-slate-700 outline-none focus:border-violet-500 focus:bg-white transition font-mono-numbers"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                >
+                  <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                </button>
+              </div>
+            </div>
+
+            <button 
+              type="submit"
+              disabled={isLoading}
+              className={`w-full py-3.5 mt-2 text-white rounded-2xl font-bold text-xs shadow-lg active:scale-95 transition flex items-center justify-center gap-2 ${
+                loginRole === 'admin' 
+                  ? 'bg-slate-900 hover:bg-slate-800 shadow-slate-300' 
+                  : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 shadow-violet-200'
+              }`}
+            >
+              {isLoading ? (
+                <>
+                  <i className="fa-solid fa-circle-notch fa-spin text-sm"></i>
+                  <span>Memverifikasi...</span>
+                </>
+              ) : (
+                <>
+                  <i className="fa-solid fa-right-to-bracket text-xs"></i>
+                  <span>Masuk Sebagai {loginRole === 'karyawan' ? 'Karyawan' : 'Admin HR'}</span>
+                </>
+              )}
+            </button>
+          </form>
+
         </div>
-      );
-    }
+      </div>
+    );
+  }
 
     function KaryawanPortal({
       currentUser,
@@ -770,8 +1084,7 @@
       currentRoute,
       navigateTo,
       showToast,
-      handleLogout,
-      supabase
+      handleLogout
     }) {
       const [clock, setClock] = useState(new Date());
       const [showYesterdayCheck, setShowYesterdayCheck] = useState(false);
@@ -879,7 +1192,7 @@
         setShowSimpleFormModal(type);
       };
 
-      const handleYesterdayConfirm = async (status, note) => {
+      const handleYesterdayConfirm = (status, note) => {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yStr = yesterday.toISOString().split('T')[0];
@@ -902,32 +1215,19 @@
           created_at: new Date().toISOString()
         };
 
-        if (supabase) {
-          await supabase.from('presensi').insert([newRecord]);
-        }
         setPresensiList([newRecord, ...presensiList]);
         
-        let updatedUser = { ...currentUser };
         if (status === 'Libur' && currentUser.sisa_libur > 0) {
-          updatedUser.sisa_libur = currentUser.sisa_libur - 1;
+          setCurrentUser({...currentUser, sisa_libur: currentUser.sisa_libur - 1});
         } else if (status === 'Cuti' && currentUser.sisa_cuti > 0) {
-          updatedUser.sisa_cuti = currentUser.sisa_cuti - 1;
+          setCurrentUser({...currentUser, sisa_cuti: currentUser.sisa_cuti - 1});
         }
-        
-        if (supabase) {
-          await supabase.from('master_karyawan').update({
-            sisa_libur: updatedUser.sisa_libur,
-            sisa_cuti: updatedUser.sisa_cuti
-          }).eq('id', currentUser.id);
-        }
-        setCurrentUser(updatedUser);
-        localStorage.setItem('suryatokoku_user', JSON.stringify(updatedUser));
         
         setShowYesterdayCheck(false);
         showToast(`Presensi kemarin dicatat sebagai ${status}!`);
       };
 
-      const handleYesterdayClaimHR = async () => {
+      const handleYesterdayClaimHR = () => {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yStr = yesterday.toISOString().split('T')[0];
@@ -943,9 +1243,6 @@
           created_at: new Date().toISOString()
         };
 
-        if (supabase) {
-          await supabase.from('klaim_kehadiran').insert([claim]);
-        }
         setKlaimList([claim, ...klaimList]);
         setShowYesterdayCheck(false);
         showToast('Tiket klaim kehadiran dikirimkan ke HRD!');
@@ -954,7 +1251,7 @@
       return (
         <div className="max-w-md mx-auto min-h-screen bg-slate-50/70 flex flex-col pb-28 shadow-2xl relative">
           
-          {/* Hero Header Card */}
+          {/* Hero Header Card (Solid Light Color) */}
           <div className="bg-[#fff0f3] text-slate-800 p-6 rounded-b-[2.5rem] border-b border-rose-100 shadow-[0_15px_40px_-15px_rgba(0,0,0,0.05)] relative z-20">
             <div className="flex items-center justify-between mb-5 relative z-10">
               <div className="flex items-center space-x-3.5">
@@ -982,6 +1279,7 @@
                 </div>
               </div>
 
+              {}
               <button 
                 onClick={() => navigateTo('#daftar-pengumuman')} 
                 className="relative w-10 h-10 rounded-full bg-white hover:bg-rose-50 active:scale-95 flex items-center justify-center border border-rose-200 transition shadow-sm"
@@ -998,6 +1296,7 @@
 
             {/* Attendance Box */}
             <div className="bg-white/60 backdrop-blur-md rounded-[1.5rem] p-4 border border-rose-100 shadow-sm relative z-10">
+              {/* Jam Waktu Operasional Center */}
               <div className="text-center mb-4">
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">Waktu Operasional</p>
                 <p className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-800 font-mono-numbers drop-shadow-sm">
@@ -1006,6 +1305,7 @@
                 <p className="text-[11px] font-medium text-slate-600 mt-0.5">{formatIndoDate(clock)}</p>
               </div>
 
+              {/* Tombol Presensi Masuk & Pulang Ramping */}
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => {
@@ -1051,7 +1351,7 @@
             </div>
           </div>
 
-          {/* Conditional Sub-Pages */}
+          {/* Conditional Sub-Pages inside Employee Mobile Portal */}
           {currentRoute === '#status-karyawan' ? (
             <StatusRekanView karyawanList={karyawanList} presensiList={presensiList} />
           ) : currentRoute === '#daftar-pengumuman' ? (
@@ -1061,7 +1361,7 @@
               navigateTo={navigateTo}
             />
           ) : currentRoute === '#profil' ? (
-            <ProfilKaryawanView currentUser={currentUser} setCurrentUser={setCurrentUser} showToast={showToast} handleLogout={handleLogout} supabase={supabase} />
+            <ProfilKaryawanView currentUser={currentUser} setCurrentUser={setCurrentUser} showToast={showToast} handleLogout={handleLogout} />
           ) : currentRoute === '#riwayat-aktivitas' ? (
             <RiwayatAktivitasView 
               currentUser={currentUser} 
@@ -1072,7 +1372,7 @@
               setFilterStatus={setFilterStatusRiwayat}
             />
           ) : currentRoute === '#ganti-password' ? (
-            <GantiPasswordView currentUser={currentUser} setCurrentUser={setCurrentUser} showToast={showToast} navigateTo={navigateTo} supabase={supabase} />
+            <GantiPasswordView currentUser={currentUser} setCurrentUser={setCurrentUser} showToast={showToast} navigateTo={navigateTo} />
           ) : (
             /* Home Beranda View */
             <div className="px-5 pt-6 space-y-6">
@@ -1082,6 +1382,7 @@
                 const latest = pengumumanList[0];
                 return (
                   <div className="bg-white/95 backdrop-blur-xl rounded-[1.75rem] p-5 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] space-y-3.5 relative overflow-hidden">
+                    {/* Header: Label, Indikator & Tombol Lihat Semua */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
                         <span className="w-2 h-2 rounded-full bg-violet-600 animate-pulse"></span>
@@ -1096,6 +1397,7 @@
                       </button>
                     </div>
 
+                    {/* Judul, Kategori & Tanggal */}
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="px-2.5 py-0.5 rounded-full bg-violet-50 text-violet-700 text-[9px] font-bold border border-violet-100">
@@ -1110,12 +1412,14 @@
                       </h4>
                     </div>
 
+                    {/* Isi Pengumuman Lengkap */}
                     <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-100/80">
                       <p className="text-xs text-slate-600 font-medium leading-relaxed whitespace-pre-line">
                         {latest.isi}
                       </p>
                     </div>
 
+                    {/* Footer Penulis */}
                     <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 font-semibold">
                       <span className="flex items-center gap-1.5 text-slate-600">
                         <i className="fa-regular fa-building text-violet-500"></i>
@@ -1129,7 +1433,7 @@
                 );
               })()}
 
-              {/* Kartu Sisa Libur & Sisa Cuti */}
+              {/* Kartu Sisa Libur & Sisa Cuti (Minimalist Colorful Style) */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white/90 backdrop-blur-xl p-3.5 rounded-[1.5rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex items-center justify-between transition">
                   <div className="flex items-center space-x-3">
@@ -1139,7 +1443,7 @@
                     <div>
                       <span className="text-[10px] text-slate-500 font-bold block leading-none mb-1">Sisa Libur</span>
                       <span className="font-display text-xl font-extrabold text-slate-800 leading-none block">
-                        {currentUser.sisa_libur ?? 0} <span className="text-[10px] font-semibold text-slate-400">Hari</span>
+                        {currentUser.sisa_libur} <span className="text-[10px] font-semibold text-slate-400">Hari</span>
                       </span>
                     </div>
                   </div>
@@ -1153,14 +1457,14 @@
                     <div>
                       <span className="text-[10px] text-slate-500 font-bold block leading-none mb-1">Sisa Cuti</span>
                       <span className="font-display text-xl font-extrabold text-slate-800 leading-none block">
-                        {currentUser.sisa_cuti ?? 0} <span className="text-[10px] font-semibold text-slate-400">Hari</span>
+                        {currentUser.sisa_cuti} <span className="text-[10px] font-semibold text-slate-400">Hari</span>
                       </span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Layanan Cepat */}
+              {/* Secondary 4-Grid Menu (Pill shapes & Colorful Icons) */}
               <div>
                 <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Layanan Cepat</h3>
                 <div className="grid grid-cols-4 gap-3">
@@ -1203,8 +1507,9 @@
                 </div>
               </div>
 
-              {/* Periode Cut-Off */}
+              {/* Payroll Cycle Summary with In-Place Activity List */}
               <div className="bg-white/90 backdrop-blur-xl rounded-[1.5rem] p-5 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                {/* Header Kartu */}
                 <div className="flex justify-between items-center mb-4">
                   <div>
                     <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-widest font-display">Periode Cut-Off</h3>
@@ -1219,59 +1524,103 @@
                   </button>
                 </div>
 
-                {/* Filter Cepat */}
+                {/* 5 Tombol Filter Cepat In-Place */}
                 <div className="grid grid-cols-5 gap-2 text-center mb-4">
-                  <div onClick={() => setCutoffFilter(prev => prev === 'Masuk' ? 'Semua' : 'Masuk')} className="cursor-pointer active:scale-95 transition">
-                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${cutoffFilter === 'Masuk' ? 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200' : 'bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-100/70'}`}>
+                  <div 
+                    onClick={() => setCutoffFilter(prev => prev === 'Masuk' ? 'Semua' : 'Masuk')} 
+                    className="cursor-pointer active:scale-95 transition"
+                  >
+                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${
+                      cutoffFilter === 'Masuk' 
+                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200' 
+                        : 'bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-100/70'
+                    }`}>
                       <span className="font-mono-numbers text-base font-bold">{employeeStats.masuk}</span>
                     </div>
                     <span className={`text-[9px] font-bold uppercase ${cutoffFilter === 'Masuk' ? 'text-emerald-700' : 'text-slate-500'}`}>Masuk</span>
                   </div>
 
-                  <div onClick={() => setCutoffFilter(prev => prev === 'Libur' ? 'Semua' : 'Libur')} className="cursor-pointer active:scale-95 transition">
-                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${cutoffFilter === 'Libur' ? 'bg-sky-600 border-sky-600 text-white shadow-sky-200' : 'bg-sky-50 border-sky-100 text-sky-600 hover:bg-sky-100/70'}`}>
+                  <div 
+                    onClick={() => setCutoffFilter(prev => prev === 'Libur' ? 'Semua' : 'Libur')} 
+                    className="cursor-pointer active:scale-95 transition"
+                  >
+                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${
+                      cutoffFilter === 'Libur' 
+                        ? 'bg-sky-600 border-sky-600 text-white shadow-sky-200' 
+                        : 'bg-sky-50 border-sky-100 text-sky-600 hover:bg-sky-100/70'
+                    }`}>
                       <span className="font-mono-numbers text-base font-bold">{employeeStats.libur}</span>
                     </div>
                     <span className={`text-[9px] font-bold uppercase ${cutoffFilter === 'Libur' ? 'text-sky-700' : 'text-slate-500'}`}>Libur</span>
                   </div>
 
-                  <div onClick={() => setCutoffFilter(prev => prev === 'Izin' ? 'Semua' : 'Izin')} className="cursor-pointer active:scale-95 transition">
-                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${cutoffFilter === 'Izin' ? 'bg-orange-600 border-orange-600 text-white shadow-orange-200' : 'bg-orange-50 border-orange-100 text-orange-600 hover:bg-orange-100/70'}`}>
+                  <div 
+                    onClick={() => setCutoffFilter(prev => prev === 'Izin' ? 'Semua' : 'Izin')} 
+                    className="cursor-pointer active:scale-95 transition"
+                  >
+                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${
+                      cutoffFilter === 'Izin' 
+                        ? 'bg-orange-600 border-orange-600 text-white shadow-orange-200' 
+                        : 'bg-orange-50 border-orange-100 text-orange-600 hover:bg-orange-100/70'
+                    }`}>
                       <span className="font-mono-numbers text-base font-bold">{employeeStats.izin}</span>
                     </div>
                     <span className={`text-[9px] font-bold uppercase ${cutoffFilter === 'Izin' ? 'text-orange-700' : 'text-slate-500'}`}>Izin</span>
                   </div>
 
-                  <div onClick={() => setCutoffFilter(prev => prev === 'Sakit' ? 'Semua' : 'Sakit')} className="cursor-pointer active:scale-95 transition">
-                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${cutoffFilter === 'Sakit' ? 'bg-amber-600 border-amber-600 text-white shadow-amber-200' : 'bg-amber-50 border-amber-100 text-amber-600 hover:bg-amber-100/70'}`}>
+                  <div 
+                    onClick={() => setCutoffFilter(prev => prev === 'Sakit' ? 'Semua' : 'Sakit')} 
+                    className="cursor-pointer active:scale-95 transition"
+                  >
+                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${
+                      cutoffFilter === 'Sakit' 
+                        ? 'bg-amber-600 border-amber-600 text-white shadow-amber-200' 
+                        : 'bg-amber-50 border-amber-100 text-amber-600 hover:bg-amber-100/70'
+                    }`}>
                       <span className="font-mono-numbers text-base font-bold">{employeeStats.sakit}</span>
                     </div>
                     <span className={`text-[9px] font-bold uppercase ${cutoffFilter === 'Sakit' ? 'text-amber-700' : 'text-slate-500'}`}>Sakit</span>
                   </div>
 
-                  <div onClick={() => setCutoffFilter(prev => prev === 'Cuti' ? 'Semua' : 'Cuti')} className="cursor-pointer active:scale-95 transition">
-                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${cutoffFilter === 'Cuti' ? 'bg-purple-600 border-purple-600 text-white shadow-purple-200' : 'bg-purple-50 border-purple-100 text-purple-600 hover:bg-purple-100/70'}`}>
+                  <div 
+                    onClick={() => setCutoffFilter(prev => prev === 'Cuti' ? 'Semua' : 'Cuti')} 
+                    className="cursor-pointer active:scale-95 transition"
+                  >
+                    <div className={`w-full py-1.5 rounded-xl border flex flex-col items-center justify-center mb-1 transition shadow-sm ${
+                      cutoffFilter === 'Cuti' 
+                        ? 'bg-purple-600 border-purple-600 text-white shadow-purple-200' 
+                        : 'bg-purple-50 border-purple-100 text-purple-600 hover:bg-purple-100/70'
+                    }`}>
                       <span className="font-mono-numbers text-base font-bold">{employeeStats.cuti}</span>
                     </div>
                     <span className={`text-[9px] font-bold uppercase ${cutoffFilter === 'Cuti' ? 'text-purple-700' : 'text-slate-500'}`}>Cuti</span>
                   </div>
                 </div>
 
+                {/* Sub-Header & Status Filter Aktif */}
                 <div className="flex items-center justify-between pt-3 border-t border-slate-100 mb-2.5">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Aktivitas Periode ({cutoffFilter === 'Semua' ? 'Semua' : cutoffFilter})
                   </span>
                   {cutoffFilter !== 'Semua' && (
-                    <button onClick={() => setCutoffFilter('Semua')} className="text-[10px] font-bold text-violet-600 hover:text-violet-800 transition">
+                    <button 
+                      onClick={() => setCutoffFilter('Semua')}
+                      className="text-[10px] font-bold text-violet-600 hover:text-violet-800 transition"
+                    >
                       Reset Filter
                     </button>
                   )}
                 </div>
 
+                {/* Daftar Aktivitas Presensi Periode Aktif */}
                 <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
                   {filteredPeriodActivities.length > 0 ? (
                     filteredPeriodActivities.map(act => (
-                      <div key={act.id} className="bg-slate-50/90 hover:bg-slate-50 p-3 rounded-2xl border border-slate-100/80 transition flex flex-col space-y-2">
+                      <div 
+                        key={act.id} 
+                        className="bg-slate-50/90 hover:bg-slate-50 p-3 rounded-2xl border border-slate-100/80 transition flex flex-col space-y-2"
+                      >
+                        {/* Baris Atas: Tanggal & Badge Status Absen */}
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-bold text-slate-800 font-mono-numbers flex items-center gap-1.5">
                             <i className="fa-regular fa-calendar text-[10px] text-slate-400"></i>
@@ -1290,6 +1639,7 @@
                           </span>
                         </div>
 
+                        {/* Baris Bawah: Shift Kerja, Jam Masuk, dan Jam Pulang */}
                         <div className="flex items-center justify-between pt-1 border-t border-slate-200/50 text-[10px]">
                           <div className="text-slate-500 font-semibold truncate pr-2 flex items-center gap-1">
                             <i className="fa-regular fa-clock text-[9px] text-violet-500"></i>
@@ -1318,7 +1668,7 @@
             </div>
           )}
 
-          {/* Floating Bottom Nav */}
+          {/* Floating Pill Bottom Navigation (Always Floating in Viewport) */}
           <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm z-50 pointer-events-auto">
             <nav className="bg-white/95 backdrop-blur-2xl border border-slate-200/80 px-6 py-3 rounded-full flex justify-between items-center shadow-[0_12px_35px_rgba(0,0,0,0.12)]">
               <button onClick={() => navigateTo('#karyawan')} className={`flex flex-col items-center space-y-1 transition ${currentRoute === '#karyawan' || currentRoute === '' ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -1349,10 +1699,7 @@
               shiftList={shiftList}
               toleransiMenit={toleransiMenit}
               onClose={() => setShowWizardModal(false)}
-              onSuccess={async (newRecord) => {
-                if (supabase) {
-                  await supabase.from('presensi').insert([newRecord]);
-                }
+              onSuccess={(newRecord) => {
                 setPresensiList([newRecord, ...presensiList]);
                 setShowWizardModal(false);
                 showToast(`Presensi ${wizardType.toUpperCase()} berhasil dikirim!`);
@@ -1455,23 +1802,16 @@
               currentUser={currentUser}
               setCurrentUser={setCurrentUser}
               onClose={() => setShowSimpleFormModal(null)}
-              onSubmitAttendance={async (rec) => {
-                if (supabase) {
-                  await supabase.from('presensi').insert([rec]);
-                }
+              onSubmitAttendance={(rec) => {
                 setPresensiList([rec, ...presensiList]);
                 setShowSimpleFormModal(null);
                 showToast(`Pengajuan ${showSimpleFormModal.toUpperCase()} berhasil dikirim!`);
               }}
-              onSubmitLembur={async (lmb) => {
-                if (supabase) {
-                  await supabase.from('pengajuan_lembur').insert([lmb]);
-                }
+              onSubmitLembur={(lmb) => {
                 setLemburList([lmb, ...lemburList]);
                 setShowSimpleFormModal(null);
                 showToast('Pengajuan lembur dikirim!');
               }}
-              supabase={supabase}
             />
           )}
 
@@ -1481,7 +1821,7 @@
 
     function PresensiWizardModal({ type, currentUser, lokasiList, shiftList, toleransiMenit, onClose, onSuccess }) {
       const [step, setStep] = useState(1);
-      const [selectedLokasi, setSelectedLokasi] = useState(lokasiList[0] || { id: 'default', nama_lokasi: 'Kantor', latitude: -6.9175, longitude: 107.6191, radius_meter: 150 });
+      const [selectedLokasi, setSelectedLokasi] = useState(lokasiList[0]);
       const [userCoords, setUserCoords] = useState(null);
       const [distance, setDistance] = useState(null);
       const [inRadius, setInRadius] = useState(false);
@@ -1508,6 +1848,7 @@
         setGpsLoading(true);
 
         if (forceSimulate) {
+          // Mode simulasi/uji coba: tempatkan titik tepat di dalam radius kantor (~20 meter)
           const simLat = selectedLokasi.latitude + 0.00012;
           const simLng = selectedLokasi.longitude + 0.00010;
           const dist = calculateDistance(simLat, simLng, selectedLokasi.latitude, selectedLokasi.longitude);
@@ -1521,6 +1862,7 @@
         }
 
         if (!navigator.geolocation) {
+          // Perangkat tidak mendukung Geolocation API, beralih ke simulasi kantor
           applyProximityFallback();
           return;
         }
@@ -1537,7 +1879,7 @@
             setGpsLoading(false);
           },
           (err) => {
-            console.warn("GPS native error:", err);
+            console.warn("GPS native error atau izin ditolak:", err);
             applyProximityFallback();
           },
           { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
@@ -1545,6 +1887,7 @@
       };
 
       const applyProximityFallback = () => {
+        // Penempatan titik fallback aman di sekitar lokasi kantor
         const simLat = selectedLokasi.latitude + 0.00015;
         const simLng = selectedLokasi.longitude + 0.00012;
         const dist = calculateDistance(simLat, simLng, selectedLokasi.latitude, selectedLokasi.longitude);
@@ -1563,6 +1906,7 @@
       useEffect(() => {
         if (step !== 1 || !mapContainerRef.current) return;
 
+        // Inisialisasi peta jika belum ada
         if (!mapInstanceRef.current) {
           const map = L.map(mapContainerRef.current, {
             zoomControl: false,
@@ -1578,10 +1922,12 @@
 
         const map = mapInstanceRef.current;
 
+        // Hapus layer lama untuk menghindari duplikasi
         if (officeCircleRef.current) map.removeLayer(officeCircleRef.current);
         if (officeMarkerRef.current) map.removeLayer(officeMarkerRef.current);
         if (userMarkerRef.current) map.removeLayer(userMarkerRef.current);
 
+        // 1. Gambar Radius & Penanda Kantor
         const officeCircle = L.circle([selectedLokasi.latitude, selectedLokasi.longitude], {
           color: '#8B5CF6',
           fillColor: '#C4B5FD',
@@ -1601,6 +1947,7 @@
           .addTo(map)
           .bindPopup(`<b>${selectedLokasi.nama_lokasi}</b><br>Radius: ${selectedLokasi.radius_meter}m`);
 
+        // 2. Gambar Penanda Posisi Pengguna (User Marker)
         if (userCoords) {
           const userIcon = L.divIcon({
             className: 'custom-user-marker',
@@ -1616,6 +1963,7 @@
             .addTo(map)
             .bindPopup(`<b>Posisi Anda</b><br>Jarak: ${distance ?? 0}m (${inRadius ? 'Dalam Area' : 'Luar Area'})`);
 
+          // Sesuaikan tampilan peta agar kantor dan posisi user muat di layar
           try {
             const group = L.featureGroup([officeCircle, userMarkerRef.current]);
             map.fitBounds(group.getBounds().pad(0.35), { maxZoom: 17 });
@@ -1626,6 +1974,7 @@
           map.setView([selectedLokasi.latitude, selectedLokasi.longitude], 16);
         }
 
+        // Koreksi ukuran kontainer Leaflet pada modal
         const resizeTimer = setTimeout(() => {
           if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
         }, 300);
@@ -1677,15 +2026,20 @@
           finalStatus = statusPulang;
         }
 
-        // Upload foto selfie ke Google Drive via GAS
-        let cloudPhotoUrl = capturedPhoto;
-        try {
-          cloudPhotoUrl = await uploadToGoogleDrive(capturedPhoto, `presensi_${currentUser.username}_${type}`);
-        } catch (err) {
-          console.warn("Upload ke Google Drive gagal, menyimpan fallback:", err);
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0];
+        const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        // Unggah foto selfie ke Google Drive via GAS Web App
+        let uploadedPhotoUrl = capturedPhoto;
+        if (capturedPhoto && capturedPhoto.startsWith('data:image')) {
+          uploadedPhotoUrl = await uploadToGoogleDriveViaGAS(
+            capturedPhoto,
+            `selfie_${currentUser.id}_${type}_${dateStr}.jpg`,
+            'presensi'
+          );
         }
 
-        const now = new Date();
         const newRecord = {
           id: 'prs-' + Date.now(),
           karyawan_id: currentUser.id,
@@ -1698,12 +2052,21 @@
           lokasi_nama: selectedLokasi.nama_lokasi,
           latitude: userCoords?.lat || selectedLokasi.latitude,
           longitude: userCoords?.lng || selectedLokasi.longitude,
-          foto_url: cloudPhotoUrl,
+          foto_url: uploadedPhotoUrl,
           keterangan: type === 'keluar' && statusPulang !== 'Pulang' ? alasanPulang : (finalStatus === 'Terlambat' ? 'Terlambat masuk' : 'Presensi App'),
-          tanggal: now.toISOString().split('T')[0],
-          jam: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          tanggal: dateStr,
+          jam: timeStr,
           created_at: now.toISOString()
         };
+
+        // Simpan ke Supabase jika terhubung
+        if (supabase) {
+          try {
+            await supabase.from('presensi').insert([newRecord]);
+          } catch (err) {
+            console.warn("Gagal simpan presensi ke Supabase:", err);
+          }
+        }
 
         setIsUploading(false);
         onSuccess(newRecord);
@@ -1730,14 +2093,14 @@
               <div className={`h-1.5 flex-1 rounded-full ${step >= 3 ? 'bg-violet-600' : 'bg-slate-100'}`}></div>
             </div>
 
-            {/* LANGKAH 1 */}
+            {/* LANGKAH 1: Validasi Lokasi & Geofence GPS */}
             {step === 1 && (
               <div className="space-y-3.5">
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 block mb-1">Pilih Titik Kantor Tujuan</label>
                   <select 
                     value={selectedLokasi.id} 
-                    onChange={(e) => setSelectedLokasi(lokasiList.find(l => l.id === e.target.value) || lokasiList[0])} 
+                    onChange={(e) => setSelectedLokasi(lokasiList.find(l => l.id === e.target.value))} 
                     className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold text-slate-700 outline-none"
                   >
                     {lokasiList.map(l => (
@@ -1746,6 +2109,7 @@
                   </select>
                 </div>
 
+                {/* Wadah Peta Leaflet */}
                 <div className="relative h-44 w-full rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-100">
                   <div ref={mapContainerRef} className="w-full h-full"></div>
                   {gpsLoading && (
@@ -1754,12 +2118,14 @@
                       <span>Mengunci Sinyal GPS...</span>
                     </div>
                   )}
+                  {/* Legenda kecil di pojok peta */}
                   <div className="absolute bottom-2 left-2 z-[400] bg-white/90 backdrop-blur-md px-2 py-1 rounded-lg text-[9px] font-bold text-slate-600 border border-slate-200 flex items-center gap-2 shadow-xs">
                     <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-violet-600"></span> Kantor</span>
                     <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Anda</span>
                   </div>
                 </div>
 
+                {/* Kotak Status Radius & Jarak Geofencing */}
                 <div className={`p-3.5 rounded-2xl flex items-center justify-between border ${inRadius ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
                   <div className="flex items-center space-x-3">
                     <div className={`w-9 h-9 rounded-full flex items-center justify-center ${inRadius ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
@@ -1783,6 +2149,7 @@
                   </button>
                 </div>
 
+                {/* Tombol Opsi Uji Coba jika di luar jangkauan */}
                 {!inRadius && (
                   <div className="bg-amber-50 border border-amber-200/80 p-2.5 rounded-2xl flex items-center justify-between">
                     <div className="text-[10px] text-amber-800 font-medium">
@@ -1808,6 +2175,7 @@
                   </div>
                 )}
 
+                {/* Tombol Lanjut */}
                 <button 
                   onClick={() => setStep(2)} 
                   disabled={!inRadius} 
@@ -1822,7 +2190,7 @@
               </div>
             )}
 
-            {/* LANGKAH 2 */}
+            {/* LANGKAH 2: Pemilihan Shift / Alasan Pulang */}
             {step === 2 && (
               <div className="space-y-4">
                 {type === 'masuk' ? (
@@ -1882,7 +2250,7 @@
               </div>
             )}
 
-            {/* LANGKAH 3 */}
+            {/* LANGKAH 3: Pengambilan Foto Selfie */}
             {step === 3 && (
               <div className="space-y-4">
                 <div className="relative w-full aspect-square bg-slate-100 rounded-3xl overflow-hidden flex items-center justify-center border border-slate-200 shadow-inner">
@@ -1905,7 +2273,6 @@
                   <div className="flex gap-2">
                     <button 
                       onClick={() => setCapturedPhoto(null)} 
-                      disabled={isUploading}
                       className="w-1/3 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full font-bold text-xs transition"
                     >
                       Ulangi Foto
@@ -1918,7 +2285,7 @@
                       {isUploading ? (
                         <>
                           <i className="fa-solid fa-spinner fa-spin"></i>
-                          <span>Menyimpan ke Drive & DB...</span>
+                          <span>Menyimpan Presensi...</span>
                         </>
                       ) : (
                         <>
@@ -1929,7 +2296,7 @@
                     </button>
                   </div>
                 )}
-                <button onClick={() => setStep(2)} disabled={isUploading} className="w-full py-1 text-xs text-slate-400 font-bold hover:text-slate-600">
+                <button onClick={() => setStep(2)} className="w-full py-1 text-xs text-slate-400 font-bold hover:text-slate-600">
                   Kembali ke Langkah Sebelumnya
                 </button>
               </div>
@@ -1939,7 +2306,7 @@
       );
     }
 
-    function SimpleActionModal({ type, currentUser, setCurrentUser, onClose, onSubmitAttendance, onSubmitLembur, supabase }) {
+    function SimpleActionModal({ type, currentUser, setCurrentUser, onClose, onSubmitAttendance, onSubmitLembur }) {
       const [keterangan, setKeterangan] = useState('');
       const [durasiJam, setDurasiJam] = useState(2);
       const [fotoBukti, setFotoBukti] = useState('');
@@ -1950,68 +2317,82 @@
         const now = new Date();
         const dateStr = now.toISOString().split('T')[0];
 
-        let cloudBuktiUrl = fotoBukti;
-        if (fotoBukti) {
-          try {
-            cloudBuktiUrl = await uploadToGoogleDrive(fotoBukti, `bukti_${type}_${currentUser.username}`);
-          } catch(e) {
-            console.warn("Upload bukti gagal, fallback:", e);
-          }
+        // Unggah foto bukti ke Google Drive via GAS jika ada
+        let uploadedBuktiUrl = fotoBukti;
+        if (fotoBukti && fotoBukti.startsWith('data:image')) {
+          uploadedBuktiUrl = await uploadToGoogleDriveViaGAS(
+            fotoBukti,
+            `bukti_${type}_${currentUser.id}_${dateStr}.jpg`,
+            type === 'lembur' ? 'lembur' : 'izin'
+          );
         }
 
         if (type === 'lembur') {
-          onSubmitLembur({ 
-            id: 'lmb-' + Date.now(), 
-            karyawan_id: currentUser.id, 
-            karyawan_nama: currentUser.nama_lengkap, 
+          const newLembur = {
+            id: 'lmb-' + Date.now(),
+            karyawan_id: currentUser.id,
+            karyawan_nama: currentUser.nama_lengkap,
             divisi: currentUser.divisi,
-            tanggal: dateStr, 
-            durasi_jam: durasiJam, 
-            keterangan: keterangan || 'Lembur', 
-            bukti_url: cloudBuktiUrl, 
-            status: 'Pending', 
-            created_at: now.toISOString() 
-          });
+            tanggal: dateStr,
+            durasi_jam: durasiJam,
+            keterangan: keterangan || 'Lembur',
+            bukti_url: uploadedBuktiUrl,
+            status: 'Pending',
+            created_at: now.toISOString()
+          };
+
+          if (supabase) {
+            try {
+              await supabase.from('pengajuan_lembur').insert([newLembur]);
+            } catch (err) {
+              console.warn("Gagal simpan lembur ke Supabase:", err);
+            }
+          }
+
           setIsSubmitting(false);
+          onSubmitLembur(newLembur);
           return;
         }
 
         let statusMap = { sakit: 'Sakit', libur: 'Libur', izin: 'Izin', cuti: 'Cuti' };
-        onSubmitAttendance({ 
-          id: 'prs-' + Date.now(), 
-          karyawan_id: currentUser.id, 
-          karyawan_nama: currentUser.nama_lengkap, 
-          divisi: currentUser.divisi, 
-          tipe: 'masuk', 
-          status: statusMap[type], 
-          shift_nama: 'Pengajuan Form', 
-          lokasi_nama: 'Mandiri', 
-          latitude: 0, 
-          longitude: 0, 
-          foto_url: cloudBuktiUrl, 
-          keterangan: keterangan || `Pengajuan ${type}`, 
-          tanggal: dateStr, 
-          jam: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), 
-          created_at: now.toISOString() 
-        });
-        
-        let updatedUser = { ...currentUser };
-        if (type === 'libur' && currentUser.sisa_libur > 0) {
-          updatedUser.sisa_libur = currentUser.sisa_libur - 1;
-        } else if (type === 'cuti' && currentUser.sisa_cuti > 0) {
-          updatedUser.sisa_cuti = currentUser.sisa_cuti - 1;
-        }
+        const newAttendance = {
+          id: 'prs-' + Date.now(),
+          karyawan_id: currentUser.id,
+          karyawan_nama: currentUser.nama_lengkap,
+          divisi: currentUser.divisi,
+          tipe: 'masuk',
+          status: statusMap[type] || 'Hadir',
+          shift_nama: 'Pengajuan Form',
+          lokasi_nama: 'Mandiri',
+          latitude: 0,
+          longitude: 0,
+          foto_url: uploadedBuktiUrl,
+          keterangan: keterangan || `Pengajuan ${type}`,
+          tanggal: dateStr,
+          jam: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          created_at: now.toISOString()
+        };
 
         if (supabase) {
-          await supabase.from('master_karyawan').update({
-            sisa_libur: updatedUser.sisa_libur,
-            sisa_cuti: updatedUser.sisa_cuti
-          }).eq('id', currentUser.id);
+          try {
+            await supabase.from('presensi').insert([newAttendance]);
+          } catch (err) {
+            console.warn("Gagal simpan absensi form ke Supabase:", err);
+          }
         }
 
-        setCurrentUser(updatedUser);
-        localStorage.setItem('suryatokoku_user', JSON.stringify(updatedUser));
+        if (type === 'libur' && currentUser.sisa_libur > 0) {
+          const updatedUser = { ...currentUser, sisa_libur: currentUser.sisa_libur - 1 };
+          setCurrentUser(updatedUser);
+          if (supabase) supabase.from('master_karyawan').update({ sisa_libur: updatedUser.sisa_libur }).eq('id', currentUser.id);
+        } else if (type === 'cuti' && currentUser.sisa_cuti > 0) {
+          const updatedUser = { ...currentUser, sisa_cuti: currentUser.sisa_cuti - 1 };
+          setCurrentUser(updatedUser);
+          if (supabase) supabase.from('master_karyawan').update({ sisa_cuti: updatedUser.sisa_cuti }).eq('id', currentUser.id);
+        }
+
         setIsSubmitting(false);
+        onSubmitAttendance(newAttendance);
       };
 
       return (
@@ -2023,22 +2404,26 @@
             </div>
             <div className="space-y-4">
               {type === 'lembur' && (
-                <div>
-                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Durasi (Jam)</label>
-                  <input type="number" min="1" max="12" value={durasiJam} onChange={(e) => setDurasiJam(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none" />
-                </div>
+                <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Durasi (Jam)</label><input type="number" min="1" max="12" value={durasiJam} onChange={(e) => setDurasiJam(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none" /></div>
               )}
+              <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Keterangan Lengkap</label><textarea rows="3" value={keterangan} onChange={(e) => setKeterangan(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 outline-none"></textarea></div>
               <div>
-                <label className="text-[11px] font-bold text-slate-500 block mb-1">Keterangan Lengkap</label>
-                <textarea rows="3" value={keterangan} onChange={(e) => setKeterangan(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 outline-none"></textarea>
-              </div>
-              <div>
-                <label className="text-[11px] font-bold text-slate-500 block mb-1">Foto Bukti (Disimpan ke Google Drive)</label>
+                <label className="text-[11px] font-bold text-slate-500 block mb-1">Foto Bukti (Opsional)</label>
                 <input type="file" accept="image/*" onChange={(e) => { const r = new FileReader(); r.onloadend = () => setFotoBukti(r.result); if(e.target.files[0]) r.readAsDataURL(e.target.files[0]); }} className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-bold file:bg-violet-50 file:text-violet-600" />
               </div>
-              <button onClick={handleSubmit} disabled={isSubmitting} className="w-full py-3.5 bg-slate-900 text-white rounded-full font-bold text-xs shadow-md active:scale-95 flex items-center justify-center gap-2">
-                {isSubmitting ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-paper-plane"></i>}
-                <span>{isSubmitting ? 'Mengunggah & Menyimpan...' : 'Kirim Pengajuan'}</span>
+              <button 
+                onClick={handleSubmit} 
+                disabled={isSubmitting} 
+                className="w-full py-3.5 bg-slate-900 text-white rounded-full font-bold text-xs shadow-md active:scale-95 flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin"></i>
+                    <span>Mengirim...</span>
+                  </>
+                ) : (
+                  <span>Kirim Pengajuan</span>
+                )}
               </button>
             </div>
           </div>
@@ -2460,50 +2845,61 @@
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-bold text-slate-800 font-mono-numbers flex items-center gap-1.5">
                         <i className="fa-regular fa-calendar text-[10px] text-slate-400"></i>
-    function ProfilKaryawanView({ currentUser, setCurrentUser, showToast, handleLogout, supabase }) {
-      const [isUpdatingFoto, setIsUpdatingFoto] = useState(false);
+                        {formatIndoDate(act.tanggal)}
+                      </span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold ${
+                        act.status === 'Hadir' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                        act.status === 'Terlambat' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                        act.status === 'Libur' ? 'bg-sky-100 text-sky-700 border border-sky-200' :
+                        act.status === 'Izin' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                        act.status === 'Sakit' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                        act.status === 'Cuti' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                        'bg-slate-200 text-slate-700'
+                      }`}>
+                        {act.status}
+                      </span>
+                    </div>
 
-      const handleUpdateFoto = async (file) => {
-        if (!file) return;
-        setIsUpdatingFoto(true);
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          const base64 = reader.result;
-          let driveUrl = base64;
-          try {
-            driveUrl = await uploadToGoogleDrive(base64, `profile_${currentUser.username}`);
-          } catch (e) {
-            console.warn("Gagal upload foto profil ke Drive:", e);
-          }
+                    {/* Baris Bawah: Shift Kerja, Jam Masuk, dan Jam Pulang */}
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px]">
+                      <div className="text-slate-500 font-semibold truncate pr-2 flex items-center gap-1">
+                        <i className="fa-regular fa-clock text-[9px] text-violet-500"></i>
+                        <span className="truncate max-w-[140px]">{act.shift}</span>
+                      </div>
+                      <div className="flex items-center space-x-2 shrink-0 font-mono-numbers font-bold">
+                        <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100" title="Jam Masuk">
+                          <i className="fa-solid fa-arrow-right-to-bracket text-[8px] mr-1"></i>{act.jamMasuk}
+                        </span>
+                        <span className="text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100" title="Jam Pulang">
+                          <i className="fa-solid fa-arrow-right-from-bracket text-[8px] mr-1"></i>{act.jamPulang}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-10 text-slate-400 bg-white/50 rounded-2xl border border-dashed border-slate-200">
+                  <i className="fa-regular fa-calendar-xmark text-xl mb-1 text-slate-300"></i>
+                  <p className="text-xs font-medium">Tidak ada catatan {filterStatus} pada periode ini</p>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      );
+    }
 
-          if (supabase) {
-            await supabase.from('master_karyawan').update({ foto_profil: driveUrl }).eq('id', currentUser.id);
-          }
-          const updated = { ...currentUser, foto_profil: driveUrl };
-          setCurrentUser(updated);
-          localStorage.setItem('suryatokoku_user', JSON.stringify(updated));
-          setIsUpdatingFoto(false);
-          showToast('Foto profil diperbarui!');
-        };
-        reader.readAsDataURL(file);
-      };
-
+    function ProfilKaryawanView({ currentUser, setCurrentUser, showToast, handleLogout }) {
       return (
         <div className="p-5 space-y-4 pb-28">
           <div className="bg-white/90 backdrop-blur-xl p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] text-center">
             <div className="relative w-24 h-24 mx-auto mb-4">
               <div className="w-full h-full rounded-full bg-slate-50 border border-slate-100 overflow-hidden flex items-center justify-center">
-                {isUpdatingFoto ? (
-                  <i className="fa-solid fa-circle-notch fa-spin text-2xl text-violet-600"></i>
-                ) : currentUser.foto_profil ? (
-                  <img src={getCleanImageUrl(currentUser.foto_profil)} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="font-bold text-2xl text-slate-300">{currentUser.nama_lengkap[0]}</span>
-                )}
+                {currentUser.foto_profil ? <img src={getCleanImageUrl(currentUser.foto_profil)} className="w-full h-full object-cover" /> : <span className="font-bold text-2xl text-slate-300">{currentUser.nama_lengkap[0]}</span>}
               </div>
               <label className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center cursor-pointer shadow-md">
                 <i className="fa-solid fa-camera text-xs"></i>
-                <input type="file" accept="image/*" onChange={(e) => handleUpdateFoto(e.target.files[0])} className="hidden" />
+                <input type="file" accept="image/*" onChange={(e) => { const r = new FileReader(); r.onloadend = () => { setCurrentUser({...currentUser, foto_profil: r.result}); showToast('Foto diperbarui'); }; if(e.target.files[0]) r.readAsDataURL(e.target.files[0]); }} className="hidden" />
               </label>
             </div>
             <h3 className="font-display font-bold text-lg text-slate-800">{currentUser.nama_lengkap}</h3>
@@ -2536,20 +2932,14 @@
       );
     }
 
-    function GantiPasswordView({ currentUser, setCurrentUser, showToast, navigateTo, supabase }) {
+    function GantiPasswordView({ currentUser, setCurrentUser, showToast, navigateTo }) {
       const [oldPass, setOldPass] = useState(''); const [newPass, setNewPass] = useState(''); const [confirmPass, setConfirmPass] = useState('');
-      const handleSave = async (e) => {
+      const handleSave = (e) => {
         e.preventDefault();
         if (oldPass !== currentUser.password) return showToast('Sandi lama salah!', 'error');
         if (newPass !== confirmPass) return showToast('Konfirmasi tidak cocok!', 'error');
-        
-        if (supabase) {
-          await supabase.from('master_karyawan').update({ password: newPass }).eq('id', currentUser.id);
-        }
-        const updated = { ...currentUser, password: newPass };
-        setCurrentUser(updated);
-        localStorage.setItem('suryatokoku_user', JSON.stringify(updated));
-        showToast('Sandi berhasil diubah di database!'); navigateTo('#profil');
+        setCurrentUser({ ...currentUser, password: newPass });
+        showToast('Sandi diubah!'); navigateTo('#profil');
       };
       return (
         <div className="p-5 pb-28">
@@ -2566,11 +2956,14 @@
       );
     }
 
+    /* ==========================================
+       ADMIN DASHBOARD WORKSPACE (Minimalist Light)
+       ========================================== */
     function AdminDashboard({
       karyawanList, setKaryawanList, presensiList, setPresensiList, lokasiList, setLokasiList,
       divisiList, setDivisiList, jabatanList, setJabatanList, shiftList, setShiftList, pengumumanList, setPengumumanList,
       adminList, setAdminList,
-      lemburList, setLemburList, klaimList, setKlaimList, toleransiMenit, setToleransiMenit, showToast, handleLogout, supabase
+      lemburList, setLemburList, klaimList, setKlaimList, toleransiMenit, setToleransiMenit, showToast, handleLogout
     }) {
       const [activeModule, setActiveModule] = useState('karyawan'); 
       const [sidebarPinned, setSidebarPinned] = useState(true);
@@ -2587,17 +2980,14 @@
         showToast('Excel diunduh!');
       };
 
-      const handleHapusPresensiHarian = async (karyawanId, karyawanNama) => {
+      const handleHapusPresensiHarian = (karyawanId, karyawanNama) => {
         if (confirm(`Hapus seluruh data presensi ${karyawanNama} pada tanggal ${selectedDate}?`)) {
-          if (supabase) {
-            await supabase.from('presensi').delete().match({ karyawan_id: karyawanId, tanggal: selectedDate });
-          }
           setPresensiList(prev => prev.filter(p => !(p.karyawan_id === karyawanId && p.tanggal === selectedDate)));
           showToast(`Presensi ${karyawanNama} tanggal ${selectedDate} berhasil dihapus.`);
         }
       };
 
-      const handleSimpanEditPresensi = async (e) => {
+      const handleSimpanEditPresensi = (e) => {
         e.preventDefault();
         const { karyawan, masuk, pulang, formMasuk, formPulang } = editingPresensiModal;
 
@@ -2622,16 +3012,9 @@
             jam: formMasuk.jam || '08:00:00',
             created_at: masuk?.created_at || new Date().toISOString()
           };
-          
-          if (supabase) {
-            await supabase.from('presensi').upsert([masukRecord]);
-          }
           updatedList = updatedList.filter(p => !(p.karyawan_id === karyawan.id && p.tanggal === selectedDate && p.tipe === 'masuk'));
           updatedList.unshift(masukRecord);
         } else if (masuk && formMasuk.status === 'Belum') {
-          if (supabase) {
-            await supabase.from('presensi').delete().eq('id', masuk.id);
-          }
           updatedList = updatedList.filter(p => p.id !== masuk.id);
         }
 
@@ -2654,15 +3037,9 @@
             jam: formPulang.jam || '17:00:00',
             created_at: pulang?.created_at || new Date().toISOString()
           };
-          if (supabase) {
-            await supabase.from('presensi').upsert([pulangRecord]);
-          }
           updatedList = updatedList.filter(p => !(p.karyawan_id === karyawan.id && p.tanggal === selectedDate && p.tipe === 'keluar'));
           updatedList.unshift(pulangRecord);
         } else if (pulang && formPulang.status === 'Belum') {
-          if (supabase) {
-            await supabase.from('presensi').delete().eq('id', pulang.id);
-          }
           updatedList = updatedList.filter(p => p.id !== pulang.id);
         }
 
@@ -2730,7 +3107,6 @@
                 jabatanList={jabatanList} 
                 showToast={showToast} 
                 setPreviewPhotoUrl={setPreviewPhotoUrl}
-                supabase={supabase}
               />
             )}
             
@@ -2742,6 +3118,7 @@
                     <p className="text-xs text-slate-400 font-medium">Tinjauan shift, jam, foto selfie, dan status kehadiran karyawan harian</p>
                   </div>
                   <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 p-1 rounded-2xl shadow-sm">
+                    {/* Tombol Panah Kiri (Hari Sebelumnya) */}
                     <button 
                       onClick={() => {
                         const cur = new Date(selectedDate);
@@ -2754,6 +3131,7 @@
                       <i className="fa-solid fa-chevron-left text-xs"></i>
                     </button>
 
+                    {/* Input Kalender Tanggal */}
                     <input 
                       type="date" 
                       value={selectedDate} 
@@ -2761,6 +3139,7 @@
                       className="bg-transparent border-0 text-xs font-bold rounded-xl px-3 py-1.5 outline-none font-mono-numbers text-slate-700 cursor-pointer" 
                     />
 
+                    {/* Tombol Panah Kanan (Hari Berikutnya) */}
                     <button 
                       onClick={() => {
                         const cur = new Date(selectedDate);
@@ -2814,6 +3193,7 @@
                                 <td className="p-4 font-mono-numbers font-semibold text-slate-700">{m ? m.jam : '-'}</td>
                                 <td className="p-4 font-mono-numbers font-semibold text-slate-700">{p ? p.jam : '-'}</td>
                                 
+                                {/* Foto Selfie Masuk */}
                                 <td className="p-4 text-center">
                                   {m?.foto_url ? (
                                     <button 
@@ -2835,6 +3215,7 @@
                                   )}
                                 </td>
 
+                                {/* Foto Selfie Pulang */}
                                 <td className="p-4 text-center">
                                   {p?.foto_url ? (
                                     <button 
@@ -2856,6 +3237,7 @@
                                   )}
                                 </td>
 
+                                {/* Status */}
                                 <td className="p-4">
                                   <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
                                     m?.status === 'Hadir' ? 'bg-emerald-50 text-emerald-600' :
@@ -2870,6 +3252,7 @@
                                   </span>
                                 </td>
 
+                                {/* Ikon Edit dan Hapus */}
                                 <td className="p-4 text-center">
                                   <div className="flex items-center justify-center space-x-1">
                                     <button 
@@ -2974,6 +3357,7 @@
                   </div>
 
                   <form onSubmit={handleSimpanEditPresensi} className="space-y-4">
+                    {/* Shift Terkait */}
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 block mb-1">Penugasan Shift</label>
                       <select 
@@ -2990,6 +3374,7 @@
                       </select>
                     </div>
 
+                    {/* Form Presensi Masuk */}
                     <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -3033,6 +3418,7 @@
                       </div>
                     </div>
 
+                    {/* Form Presensi Pulang */}
                     <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -3093,6 +3479,7 @@
               </div>
             )}
 
+            {/* Additional modules map simply to standard modern minimalist white cards... */}
             {activeModule === 'periode' && (
               <RekapanPeriodeView 
                 karyawanList={karyawanList}
@@ -3103,6 +3490,7 @@
               />
             )}
 
+            {}
             {activeModule === 'libur_cuti' && (
               <MasterLiburCutiView
                 karyawanList={karyawanList}
@@ -3110,7 +3498,6 @@
                 presensiList={presensiList}
                 exportToExcel={exportToExcel}
                 showToast={showToast}
-                supabase={supabase}
               />
             )}
 
@@ -3121,21 +3508,19 @@
                 showToast={showToast}
                 setPreviewPhotoUrl={setPreviewPhotoUrl}
                 exportToExcel={exportToExcel}
-                supabase={supabase}
               />
             )}
 
-            {activeModule === 'lokasi' && <MasterLokasiView lokasiList={lokasiList} setLokasiList={setLokasiList} showToast={showToast} supabase={supabase} />}
-            {activeModule === 'shift' && <MasterShiftView shiftList={shiftList} setShiftList={setShiftList} toleransiMenit={toleransiMenit} setToleransiMenit={setToleransiMenit} showToast={showToast} supabase={supabase} />}
-            {activeModule === 'divisi' && <MasterDivisiView divisiList={divisiList} setDivisiList={setDivisiList} shiftList={shiftList} showToast={showToast} supabase={supabase} />}
-            {activeModule === 'jabatan' && <MasterJabatanView jabatanList={jabatanList} setJabatanList={setJabatanList} divisiList={divisiList} showToast={showToast} supabase={supabase} />}
-            {activeModule === 'admin' && <MasterAdminView adminList={adminList} setAdminList={setAdminList} showToast={showToast} supabase={supabase} />}
+            {activeModule === 'lokasi' && <MasterLokasiView lokasiList={lokasiList} setLokasiList={setLokasiList} showToast={showToast} />}
+            {activeModule === 'shift' && <MasterShiftView shiftList={shiftList} setShiftList={setShiftList} toleransiMenit={toleransiMenit} setToleransiMenit={setToleransiMenit} showToast={showToast} />}
+            {activeModule === 'divisi' && <MasterDivisiView divisiList={divisiList} setDivisiList={setDivisiList} shiftList={shiftList} showToast={showToast} />}
+            {activeModule === 'jabatan' && <MasterJabatanView jabatanList={jabatanList} setJabatanList={setJabatanList} divisiList={divisiList} showToast={showToast} />}
+            {activeModule === 'admin' && <MasterAdminView adminList={adminList} setAdminList={setAdminList} showToast={showToast} />}
             {activeModule === 'pengumuman' && (
               <MasterPengumumanView 
                 pengumumanList={pengumumanList} 
                 setPengumumanList={setPengumumanList} 
                 showToast={showToast} 
-                supabase={supabase}
               />
             )}
 
@@ -5528,5 +5913,27 @@
     const rootElement = document.getElementById('root');
     ReactDOM.createRoot(rootElement).render(<App />);
   </script>
+  
+<!-- PWA: Registrasi Service Worker -->
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker
+        .register("./sw.js")
+        .then((registration) => {
+          console.log(
+            "Service Worker berhasil terdaftar:",
+            registration.scope
+          );
+        })
+        .catch((error) => {
+          console.error(
+            "Registrasi Service Worker gagal:",
+            error
+          );
+        });
+    });
+  }
+</script>
 </body>
 </html>
