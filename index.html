@@ -108,13 +108,31 @@
     const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz2XNXvOnw-bL9SVKhcgJvKuYiRYJtLMqoNLeGSesIUss_s2rv6c83TO-ZB0QsP5J70OA/exec";
     const GOOGLE_DRIVE_FOLDER_ID = "10QkIZG7iJbdcHwRTyKZt1EKlqADJ8V36";
 
+    // Bersihkan sesi demo lama dari versi sebelumnya; tidak menghapus data database.
+    try {
+      const cachedUser = JSON.parse(localStorage.getItem('suryatokoku_user') || 'null');
+      const cachedId = String(cachedUser?.id || '');
+      if (['kry-001', 'kry-002', 'kry-003', 'adm-01', 'adm-02'].includes(cachedId)) {
+        localStorage.removeItem('suryatokoku_user');
+        localStorage.removeItem('suryatokoku_session');
+        localStorage.removeItem('suryatokoku_is_admin');
+      }
+    } catch (_) {
+      localStorage.removeItem('suryatokoku_user');
+      localStorage.removeItem('suryatokoku_session');
+      localStorage.removeItem('suryatokoku_is_admin');
+    }
+
     let supabase = null;
     try {
       if (window.supabase && SUPABASE_URL) {
         supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       }
     } catch(e) {
-      console.warn("Supabase initialization error:", e);
+      console.error("Supabase initialization error:", e);
+    }
+    if (!supabase) {
+      console.error('Supabase client tidak terbentuk. Pastikan CDN @supabase/supabase-js dapat dimuat dan URL/anon key benar.');
     }
 
     // Helper mutasi database: UI hanya diubah setelah Supabase mengonfirmasi sukses.
@@ -253,294 +271,7 @@
       });
     }
 
-    // Initial Master Data for Mock Storage
-    const INITIAL_KARYAWAN = [
-      {
-        id: 'kry-001',
-        nama_lengkap: 'Budi Pratama, S.Kom',
-        username: 'budi',
-        password: '123',
-        no_wa: '081234567890',
-        email: 'budi@suryatokoku.com',
-        divisi: 'Teknologi & IT',
-        tgl_lahir: '1995-04-12',
-        alamat: JSON.stringify({ provinsi: 'Jawa Barat', kota: 'Kota Bandung', jalan: 'Jl. Surya Kencana No. 45' }),
-        shifts: ['Pagi (08:00 - 17:00)', 'Shift Malam (20:00 - 05:00)'],
-        sisa_libur: 3,
-        sisa_cuti: 0,
-        foto_profil: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'
-      },
-      {
-        id: 'kry-002',
-        nama_lengkap: 'Siti Sarah Rahmawati',
-        username: 'siti',
-        password: '123',
-        no_wa: '085712345678',
-        email: 'siti@suryatokoku.com',
-        divisi: 'Operasional Toko',
-        tgl_lahir: '1998-08-20',
-        alamat: JSON.stringify({ provinsi: 'Jawa Barat', kota: 'Cirebon', jalan: 'Jl. Siliwangi No. 12' }),
-        shifts: ['Pagi (08:00 - 17:00)', 'Siang (12:00 - 21:00)'],
-        sisa_libur: 4,
-        sisa_cuti: 0,
-        foto_profil: ''
-      },
-      {
-        id: 'kry-003',
-        nama_lengkap: 'Ahmad Faisal',
-        username: 'faisal',
-        password: '123',
-        no_wa: '08987654321',
-        email: 'faisal@suryatokoku.com',
-        divisi: 'Logistik & Gudang',
-        tgl_lahir: '1994-01-15',
-        alamat: JSON.stringify({ provinsi: 'Jawa Barat', kota: 'Kuningan', jalan: 'Jl. Sudirman No. 8' }),
-        shifts: ['Pagi (08:00 - 17:00)'],
-        sisa_libur: 2,
-        sisa_cuti: 0,
-        foto_profil: ''
-      }
-    ];
-
-    const INITIAL_LOKASI = [
-      { id: 'lok-01', nama_lokasi: 'Kantor Pusat Suryatokoku', latitude: -6.9175, longitude: 107.6191, radius_meter: 150 },
-      { id: 'lok-02', nama_lokasi: 'Gudang Hub Cirebon', latitude: -6.7063, longitude: 108.5570, radius_meter: 120 },
-    ];
-
-    const INITIAL_DIVISI = [
-      { id: 'div-01', nama_divisi: 'Teknologi & IT', shifts: ['Pagi (08:00 - 17:00)'], allow_cuti: true },
-      { id: 'div-02', nama_divisi: 'Operasional Toko', shifts: ['Pagi (08:00 - 17:00)', 'Siang (12:00 - 21:00)'], allow_cuti: false },
-      { id: 'div-03', nama_divisi: 'Logistik & Gudang', shifts: ['Pagi (08:00 - 17:00)'], allow_cuti: true }
-    ];
-
-    const INITIAL_JABATAN = [
-      { id: 'jab-01', nama_jabatan: 'Frontend Developer', divisi: 'Teknologi & IT' },
-      { id: 'jab-02', nama_jabatan: 'Backend Developer', divisi: 'Teknologi & IT' },
-      { id: 'jab-03', nama_jabatan: 'Kasir Toko', divisi: 'Operasional Toko' },
-      { id: 'jab-04', nama_jabatan: 'Kepala Toko', divisi: 'Operasional Toko' },
-      { id: 'jab-05', nama_jabatan: 'Staff Pergudangan', divisi: 'Logistik & Gudang' }
-    ];
-
-    const INITIAL_SHIFTS = [
-      { id: 'sh-01', nama_shift: 'Pagi (08:00 - 17:00)', jam_masuk: '08:00', jam_pulang: '17:00' },
-      { id: 'sh-02', nama_shift: 'Siang (12:00 - 21:00)', jam_masuk: '12:00', jam_pulang: '21:00' },
-    ];
-
-    const INITIAL_PENGUMUMAN = [
-      { 
-        id: 'pgm-1', 
-        judul: 'Pemberitahuan Cut-Off Presensi & Penggajian Periode 26 - 25', 
-        kategori: 'Payroll',
-        isi: 'Diberitahukan kepada seluruh karyawan bahwa batas akhir verifikasi presensi, pengajuan lembur, dan klaim kehadiran untuk periode penggajian bulan ini adalah tanggal 25 pukul 23:59 WIB. Mohon segera mengecek riwayat absensi masing-masing pada menu Riwayat di aplikasi.', 
-        author: 'HRD Suryatokoku', 
-        created_at: new Date(Date.now() - 1 * 86400000).toISOString() 
-      },
-      { 
-        id: 'pgm-2', 
-        judul: 'Pembaruan Kebijakan Seragam & Standar Sanitasi Toko', 
-        kategori: 'Operasional',
-        isi: 'Mulai pekan ini, seluruh staf operasional toko dan kasir diwajibkan mengenakan apron resmi dan name tag bertali ungu selama jam operasional. Tim logistik juga diimbau memakai sarung tangan kerja saat proses bongkar muat barang di gudang hub.', 
-        author: 'Manajemen Operasional', 
-        created_at: new Date(Date.now() - 4 * 86400000).toISOString() 
-      },
-      { 
-        id: 'pgm-3', 
-        judul: 'Jadwal Libur Bersama & Penyesuaian Shift Toko', 
-        kategori: 'Hari Libur',
-        isi: 'Toko Suryatokoku tetap melayani pelanggan selama libur nasional dengan sistem shift rotasi tim. Bagi karyawan yang terjadwal piket kerja pada hari libur, akan memperoleh kompensasi insentif dan hak libur pengganti yang otomatis tercatat pada Master Libur & Cuti.', 
-        author: 'HRD Suryatokoku', 
-        created_at: new Date(Date.now() - 8 * 86400000).toISOString() 
-      },
-      { 
-        id: 'pgm-4', 
-        judul: 'Sosialisasi Program Jaminan Kesehatan & Ketenagakerjaan', 
-        kategori: 'Informasi Umum',
-        isi: 'Departemen HR akan mengadakan sesi webinar singkat mengenai tata cara klaim manfaat perlindungan tenaga kerja pada hari Jumat pukul 14:00 WIB. Tautan ruang rapat daring akan dibagikan via grup WhatsApp operasional.', 
-        author: 'Staf HRD', 
-        created_at: new Date(Date.now() - 12 * 86400000).toISOString() 
-      }
-    ];
-
-    const INITIAL_ADMINS = [
-      { id: 'adm-01', nama_lengkap: 'Super Admin HR', username: 'admin', password: '123', email: 'admin@suryatokoku.com', role: 'Super Administrator' },
-      { id: 'adm-02', nama_lengkap: 'Staf HRD', username: 'hrd_staff', password: '123', email: 'hrd@suryatokoku.com', role: 'Staf HRD' }
-    ];
-
-    // Data dummy presensi multi-hari untuk pengujian Rekapan 26-25
-    const generateInitialPresensi = () => {
-      const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
-      
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yStr = yesterday.toISOString().split('T')[0];
-
-      const twoDaysAgo = new Date(today);
-      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-      const twoStr = twoDaysAgo.toISOString().split('T')[0];
-
-      return [
-        {
-          id: 'prs-001',
-          karyawan_id: 'kry-001',
-          karyawan_nama: 'Budi Pratama, S.Kom',
-          divisi: 'Teknologi & IT',
-          tipe: 'masuk',
-          status: 'Hadir',
-          shift_nama: 'Pagi (08:00 - 17:00)',
-          lokasi_nama: 'Kantor Pusat Suryatokoku',
-          latitude: -6.9175,
-          longitude: 107.6191,
-          foto_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-          keterangan: 'Tepat waktu',
-          tanggal: todayStr,
-          jam: '07:55:12',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'prs-002',
-          karyawan_id: 'kry-001',
-          karyawan_nama: 'Budi Pratama, S.Kom',
-          divisi: 'Teknologi & IT',
-          tipe: 'keluar',
-          status: 'Pulang',
-          shift_nama: 'Pagi (08:00 - 17:00)',
-          lokasi_nama: 'Kantor Pusat Suryatokoku',
-          latitude: -6.9175,
-          longitude: 107.6191,
-          foto_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-          keterangan: 'Pulang tepat waktu',
-          tanggal: todayStr,
-          jam: '17:05:40',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'prs-003',
-          karyawan_id: 'kry-001',
-          karyawan_nama: 'Budi Pratama, S.Kom',
-          divisi: 'Teknologi & IT',
-          tipe: 'masuk',
-          status: 'Terlambat',
-          shift_nama: 'Pagi (08:00 - 17:00)',
-          lokasi_nama: 'Kantor Pusat Suryatokoku',
-          latitude: -6.9175,
-          longitude: 107.6191,
-          foto_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
-          keterangan: 'Kepadatan lalu lintas',
-          tanggal: yStr,
-          jam: '08:22:10',
-          created_at: new Date(yesterday).toISOString()
-        },
-        {
-          id: 'prs-004',
-          karyawan_id: 'kry-002',
-          karyawan_nama: 'Siti Sarah Rahmawati',
-          divisi: 'Operasional Toko',
-          tipe: 'masuk',
-          status: 'Hadir',
-          shift_nama: 'Pagi (08:00 - 17:00)',
-          lokasi_nama: 'Kantor Pusat Suryatokoku',
-          latitude: -6.9175,
-          longitude: 107.6191,
-          foto_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-          keterangan: 'Tepat waktu',
-          tanggal: todayStr,
-          jam: '07:48:30',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'prs-005',
-          karyawan_id: 'kry-002',
-          karyawan_nama: 'Siti Sarah Rahmawati',
-          divisi: 'Operasional Toko',
-          tipe: 'masuk',
-          status: 'Libur',
-          shift_nama: 'Reguler',
-          lokasi_nama: 'Jadwal Libur Mingguan',
-          latitude: 0,
-          longitude: 0,
-          foto_url: '',
-          keterangan: 'Libur terjadwal',
-          tanggal: yStr,
-          jam: '08:00:00',
-          created_at: new Date(yesterday).toISOString()
-        },
-        {
-          id: 'prs-006',
-          karyawan_id: 'kry-003',
-          karyawan_nama: 'Ahmad Faisal',
-          divisi: 'Logistik & Gudang',
-          tipe: 'masuk',
-          status: 'Sakit',
-          shift_nama: 'Pagi (08:00 - 17:00)',
-          lokasi_nama: 'Izin Mandiri',
-          latitude: 0,
-          longitude: 0,
-          foto_url: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=400&q=80',
-          keterangan: 'Flu dan demam (Surat dokter terlampir)',
-          tanggal: todayStr,
-          jam: '08:00:00',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'prs-007',
-          karyawan_id: 'kry-003',
-          karyawan_nama: 'Ahmad Faisal',
-          divisi: 'Logistik & Gudang',
-          tipe: 'masuk',
-          status: 'Hadir',
-          shift_nama: 'Pagi (08:00 - 17:00)',
-          lokasi_nama: 'Gudang Hub Cirebon',
-          latitude: -6.7063,
-          longitude: 108.5570,
-          foto_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
-          keterangan: 'Tepat waktu',
-          tanggal: twoStr,
-          jam: '07:50:00',
-          created_at: new Date(twoDaysAgo).toISOString()
-        }
-      ];
-    };
-
-    // Data dummy pengajuan lembur karyawan
-    const INITIAL_LEMBUR = [
-      {
-        id: 'lmb-01',
-        karyawan_id: 'kry-001',
-        karyawan_nama: 'Budi Pratama, S.Kom',
-        divisi: 'Teknologi & IT',
-        tanggal: new Date().toISOString().split('T')[0],
-        durasi_jam: 3,
-        keterangan: 'Deployment patch sistem database & sinkronisasi API inventory toko.',
-        bukti_url: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=500&q=80',
-        status: 'Pending',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'lmb-02',
-        karyawan_id: 'kry-003',
-        karyawan_nama: 'Ahmad Faisal',
-        divisi: 'Logistik & Gudang',
-        tanggal: (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0]; })(),
-        durasi_jam: 2.5,
-        keterangan: 'Bongkar muat pasokan stok barang impor masuk ke Hub Cirebon.',
-        bukti_url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=500&q=80',
-        status: 'Approved',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'lmb-03',
-        karyawan_id: 'kry-002',
-        karyawan_nama: 'Siti Sarah Rahmawati',
-        divisi: 'Operasional Toko',
-        tanggal: (() => { const d = new Date(); d.setDate(d.getDate() - 2); return d.toISOString().split('T')[0]; })(),
-        durasi_jam: 1.5,
-        keterangan: 'Stock opname barang kasir dan penutupan shift bulanan.',
-        bukti_url: '',
-        status: 'Rejected',
-        created_at: new Date().toISOString()
-      }
-    ];
+    // Data aplikasi hanya dimuat dari Supabase; tidak ada seed/dummy data lokal.
 
     function App() {
       const [currentRoute, setCurrentRoute] = useState(window.location.hash || '#karyawan');
@@ -561,17 +292,17 @@
       return localStorage.getItem('suryatokoku_is_admin') === 'true';
     });
 
-    const [karyawanList, setKaryawanList] = useState(INITIAL_KARYAWAN);
-    const [lokasiList, setLokasiList] = useState(INITIAL_LOKASI);
-    const [divisiList, setDivisiList] = useState(INITIAL_DIVISI);
-    const [jabatanList, setJabatanList] = useState(INITIAL_JABATAN);
-    const [shiftList, setShiftList] = useState(INITIAL_SHIFTS);
-    const [pengumumanList, setPengumumanList] = useState(INITIAL_PENGUMUMAN);
-    const [adminList, setAdminList] = useState(INITIAL_ADMINS);
+    const [karyawanList, setKaryawanList] = useState([]);
+    const [lokasiList, setLokasiList] = useState([]);
+    const [divisiList, setDivisiList] = useState([]);
+    const [jabatanList, setJabatanList] = useState([]);
+    const [shiftList, setShiftList] = useState([]);
+    const [pengumumanList, setPengumumanList] = useState([]);
+    const [adminList, setAdminList] = useState([]);
     const [toleransiMenit, setToleransiMenit] = useState(15);
       
-    const [presensiList, setPresensiList] = useState(generateInitialPresensi);
-    const [lemburList, setLemburList] = useState(INITIAL_LEMBUR);
+    const [presensiList, setPresensiList] = useState([]);
+    const [lemburList, setLemburList] = useState([]);
     const [klaimList, setKlaimList] = useState([]);
     const [toast, setToast] = useState(null);
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -579,17 +310,21 @@
 
     // Sinkronisasi data awal dari Supabase
     useEffect(() => {
-      if (!supabase) return;
+      if (!supabase) {
+        showToast('Supabase belum tersambung. Periksa koneksi internet dan pemuatan library Supabase.', 'error');
+        return;
+      }
 
       const fetchAllFromSupabase = async () => {
         setIsLoadingData(true);
+        const loadErrors = [];
         try {
           // 1. Master Karyawan
           const { data: kryData, error: kryErr } = await supabase.from('master_karyawan').select('*');
           if (!kryErr) {
             setKaryawanList(kryData ?? []);
           } else {
-            console.warn('Gagal memuat master_karyawan:', kryErr);
+            console.error('Gagal memuat master_karyawan:', kryErr); loadErrors.push('master_karyawan: ' + (kryErr?.message || 'error tidak diketahui'));
           }
 
           // 2. Master Lokasi
@@ -597,7 +332,7 @@
           if (!lokErr) {
             setLokasiList(lokData ?? []);
           } else {
-            console.warn('Gagal memuat master_lokasi:', lokErr);
+            console.error('Gagal memuat master_lokasi:', lokErr); loadErrors.push('master_lokasi: ' + (lokErr?.message || 'error tidak diketahui'));
           }
 
           // 3. Master Divisi
@@ -605,7 +340,7 @@
           if (!divErr) {
             setDivisiList(divData ?? []);
           } else {
-            console.warn('Gagal memuat master_divisi:', divErr);
+            console.error('Gagal memuat master_divisi:', divErr); loadErrors.push('master_divisi: ' + (divErr?.message || 'error tidak diketahui'));
           }
 
           // 4. Master Jabatan
@@ -613,7 +348,7 @@
           if (!jabErr) {
             setJabatanList(jabData ?? []);
           } else {
-            console.warn('Gagal memuat master_jabatan:', jabErr);
+            console.error('Gagal memuat master_jabatan:', jabErr); loadErrors.push('master_jabatan: ' + (jabErr?.message || 'error tidak diketahui'));
           }
 
           // 5. Master Shift
@@ -621,7 +356,7 @@
           if (!shErr) {
             setShiftList(shData ?? []);
           } else {
-            console.warn('Gagal memuat master_shift:', shErr);
+            console.error('Gagal memuat master_shift:', shErr); loadErrors.push('master_shift: ' + (shErr?.message || 'error tidak diketahui'));
           }
 
           // 6. Master Admin
@@ -629,7 +364,7 @@
           if (!admErr) {
             setAdminList(admData ?? []);
           } else {
-            console.warn('Gagal memuat master_admin:', admErr);
+            console.error('Gagal memuat master_admin:', admErr); loadErrors.push('master_admin: ' + (admErr?.message || 'error tidak diketahui'));
           }
 
           // 7. Pengumuman
@@ -637,7 +372,7 @@
           if (!pgmErr) {
             setPengumumanList(pgmData ?? []);
           } else {
-            console.warn('Gagal memuat pengumuman:', pgmErr);
+            console.error('Gagal memuat pengumuman:', pgmErr); loadErrors.push('pengumuman: ' + (pgmErr?.message || 'error tidak diketahui'));
           }
 
           // 8. Presensi Transaksi
@@ -645,7 +380,7 @@
           if (!prsErr) {
             setPresensiList(prsData ?? []);
           } else {
-            console.warn('Gagal memuat presensi:', prsErr);
+            console.error('Gagal memuat presensi:', prsErr); loadErrors.push('presensi: ' + (prsErr?.message || 'error tidak diketahui'));
           }
 
           // 9. Pengajuan Lembur
@@ -653,7 +388,7 @@
           if (!lmbErr) {
             setLemburList(lmbData ?? []);
           } else {
-            console.warn('Gagal memuat pengajuan_lembur:', lmbErr);
+            console.error('Gagal memuat pengajuan_lembur:', lmbErr); loadErrors.push('pengajuan_lembur: ' + (lmbErr?.message || 'error tidak diketahui'));
           }
 
           // 10. Klaim Kehadiran
@@ -661,13 +396,19 @@
           if (!klmErr) {
             setKlaimList(klmData ?? []);
           } else {
-            console.warn('Gagal memuat klaim_kehadiran:', klmErr);
+            console.error('Gagal memuat klaim_kehadiran:', klmErr); loadErrors.push('klaim_kehadiran: ' + (klmErr?.message || 'error tidak diketahui'));
           }
 
           // 11. Pengaturan Toleransi
-          const { data: setToleransi } = await supabase.from('settings').select('value').eq('key', 'toleransi_menit').single();
-          if (setToleransi && setToleransi.value) {
+          const { data: setToleransi, error: setErr } = await supabase.from('settings').select('value').eq('key', 'toleransi_menit').single();
+          if (!setErr && setToleransi && setToleransi.value !== null && setToleransi.value !== undefined) {
             setToleransiMenit(Number(setToleransi.value));
+          } else if (setErr && setErr.code !== 'PGRST116') {
+            console.error('Gagal memuat settings:', setErr); loadErrors.push('settings: ' + (setErr?.message || 'error tidak diketahui'));
+          }
+          if (loadErrors.length) {
+            console.error('Sebagian tabel gagal dimuat dari Supabase:', loadErrors);
+            showToast('Sebagian tabel gagal dimuat. Buka F12 > Console untuk melihat tabel dan pesan error.', 'error');
           }
         } catch (err) {
           console.warn("Gagal memuat data dari Supabase:", err);
@@ -703,9 +444,9 @@
     const handleLoginKaryawan = (identifier, password) => {
       const trimmedId = identifier.trim().toLowerCase();
       const user = karyawanList.find(k => 
-        (k.username.toLowerCase() === trimmedId || 
-         k.no_wa === trimmedId || 
-         k.email.toLowerCase() === trimmedId) && 
+        ((k.username || '').toLowerCase() === trimmedId || 
+         (k.no_wa || '') === trimmedId || 
+         (k.email || '').toLowerCase() === trimmedId) && 
         k.password === password
       );
 
@@ -728,7 +469,7 @@
     const handleLoginAdmin = (identifier, password) => {
       const trimmedId = identifier.trim().toLowerCase();
       const admin = adminList.find(a => 
-        (a.username.toLowerCase() === trimmedId || a.email.toLowerCase() === trimmedId) && 
+        ((a.username || '').toLowerCase() === trimmedId || (a.email || '').toLowerCase() === trimmedId) && 
         a.password === password
       );
 
@@ -1003,12 +744,6 @@
       }, 500);
     };
 
-    // Quick Login Demo Helper
-    const applyDummyCredential = (user) => {
-      setIdentifier(user.username);
-      setPassword(user.password);
-      showToast(`Kredensial ${user.nama_lengkap} disiapkan. Silakan klik Masuk.`, 'info');
-    };
 
     return (
       <div className="min-h-[calc(100vh-60px)] flex items-center justify-center p-4 sm:p-6 relative z-10">
@@ -1044,7 +779,7 @@
                 <input 
                   type="text" 
                   required
-                  placeholder={loginRole === 'karyawan' ? "budi atau 081234567890" : "admin atau hrd@suryatokoku.com"}
+                  placeholder={loginRole === 'karyawan' ? 'Masukkan username, No. WhatsApp, atau email' : 'Masukkan username atau email admin'}
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl pl-10 pr-4 py-3.5 font-bold text-slate-700 outline-none focus:border-violet-500 focus:bg-white transition"
@@ -1055,9 +790,7 @@
             <div>
               <div className="flex justify-between items-center mb-1.5 ml-1">
                 <label className="text-[11px] font-bold text-slate-500">Kata Sandi</label>
-                <span className="text-[10px] text-violet-600 font-semibold cursor-pointer" onClick={() => showToast('Gunakan password demo: 123', 'info')}>
-                  Lupa Sandi?
-                </span>
+                <span className="text-[10px] text-slate-400 font-semibold">Hubungi administrator jika lupa sandi</span>
               </div>
               <div className="relative">
                 <i className="fa-solid fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -5672,7 +5405,7 @@
                     <label className="text-[10px] font-bold text-slate-400 block mb-1">Email</label>
                     <input 
                       type="email" 
-                      placeholder="admin@suryatokoku.com" 
+                      placeholder="Email admin" 
                       value={form.email} 
                       onChange={e => setForm({ ...form, email: e.target.value })} 
                       className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none focus:border-violet-500" 
