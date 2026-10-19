@@ -523,6 +523,8 @@
       setCurrentRoute(hash);
     };
 
+    const isDashboardRoute = currentRoute.startsWith('#dashboard');
+
     const handleLoginKaryawan = (identifier, password) => {
       const trimmedId = identifier.trim().toLowerCase();
       const user = karyawanList.find(k => 
@@ -579,113 +581,180 @@
       localStorage.removeItem('suryatokoku_user');
       localStorage.removeItem('suryatokoku_session');
       localStorage.removeItem('suryatokoku_is_admin');
+      const wasAdmin = isAdmin;
       setCurrentUser(null);
       setAuthSession(null);
       setIsAdmin(false);
       setShowLogoutConfirm(false);
-      navigateTo('#login');
+      if (wasAdmin) {
+        navigateTo('#dashboard');
+      } else {
+        navigateTo('#karyawan');
+      }
       showToast('Anda telah berhasil keluar sistem.');
     };
 
-    // Jika belum login, tampilkan layar login
-    if (!authSession || !currentUser) {
-      return (
-        <div className="min-h-screen flex flex-col justify-between">
-          <AuthPortalView 
-            karyawanList={karyawanList}
-            adminList={adminList}
-            onLoginKaryawan={handleLoginKaryawan}
-            onLoginAdmin={handleLoginAdmin}
-            showToast={showToast}
-          />
-          {toast && (
-            <div className="fixed top-5 right-5 z-50 flex items-center space-x-3 bg-white/95 backdrop-blur-xl text-slate-800 px-5 py-3.5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-100 animate-bounce">
-              <i className={`fa-solid ${toast.type === 'success' ? 'fa-circle-check text-emerald-500' : 'fa-circle-exclamation text-rose-500'} text-xl`}></i>
-              <div className="text-sm font-semibold pr-2">{toast.message}</div>
-              <button onClick={() => setToast(null)} className="text-slate-400 hover:text-slate-600">
-                <i className="fa-solid fa-xmark"></i>
-              </button>
-            </div>
-          )}
-        </div>
-      );
-    }
+    // Validasi apakah sesi saat ini sesuai dengan portal yang sedang dibuka
+    const isEmployeeAuthenticated = authSession?.type === 'karyawan' && currentUser && !isAdmin;
+    const isAdminAuthenticated = authSession?.type === 'admin' && currentUser && isAdmin;
 
     return (
       <div className="min-h-screen flex flex-col justify-between">
-        {/* Top Header bar */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 text-slate-700 text-xs py-2.5 px-4 flex justify-between items-center z-50 sticky top-0 shadow-sm">
-          <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
-            <span className="font-bold tracking-wide font-display bg-clip-text text-transparent bg-gradient-to-r from-violet-600 to-fuchsia-600">SURYATOKOKU HR</span>
-            <span className="hidden sm:inline text-slate-400 font-medium">| {isAdmin ? 'Enterprise Workspace' : 'Employee App'}</span>
+        {/* Top Navigation Bar: Tampil selalu di setiap halaman (termasuk halaman login) */}
+        <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
+          {/* Brand Logo */}
+          <div 
+            onClick={() => navigateTo(isDashboardRoute ? '#dashboard' : '#karyawan')}
+            className="flex items-center space-x-2 cursor-pointer select-none"
+          >
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-violet-600 to-fuchsia-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+              ST
+            </div>
+            <div className="flex flex-col">
+              <span className="font-extrabold tracking-tight font-display bg-clip-text text-transparent bg-gradient-to-r from-violet-600 to-fuchsia-600 text-xs sm:text-sm">
+                SURYATOKOKU HR
+              </span>
+              <span className="text-[9px] text-slate-400 font-semibold hidden sm:inline -mt-0.5">
+                {isDashboardRoute ? 'Admin HR Workspace' : 'Employee Portal'}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center space-x-2.5">
-            <span className="text-[11px] font-bold text-slate-600 hidden md:inline">
-              <i className="fa-regular fa-user mr-1.5 text-violet-500"></i>{currentUser.nama_lengkap}
-            </span>
-            <button 
-              onClick={handleLogout}
-              className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 active:scale-95 font-semibold rounded-full transition flex items-center gap-1.5 text-xs shadow-sm border border-rose-200"
-              title="Keluar dari sesi ini"
+
+          {/* Switcher Tabs Navigasi: Akses Karyawan vs Admin (#dashboard) */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-full border border-slate-200/80 shadow-inner">
+            <button
+              type="button"
+              onClick={() => navigateTo('#karyawan')}
+              className={`px-3 sm:px-4 py-1.5 rounded-full text-[11px] font-bold transition flex items-center gap-1.5 ${
+                !isDashboardRoute
+                  ? 'bg-white text-violet-700 shadow-sm border border-slate-200/60'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
             >
-              <i className="fa-solid fa-arrow-right-from-bracket"></i>
-              <span>Keluar</span>
+              <i className="fa-solid fa-mobile-screen text-xs"></i>
+              <span>Karyawan</span>
             </button>
+            <button
+              type="button"
+              onClick={() => navigateTo('#dashboard')}
+              className={`px-3 sm:px-4 py-1.5 rounded-full text-[11px] font-bold transition flex items-center gap-1.5 ${
+                isDashboardRoute
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <i className="fa-solid fa-shield-halved text-xs"></i>
+              <span>Admin</span>
+              <span className={`text-[9px] font-mono-numbers px-1.5 py-0.2 rounded-md ${isDashboardRoute ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                #dashboard
+              </span>
+            </button>
+          </div>
+
+          {/* User Status / Logout Button */}
+          <div className="flex items-center space-x-2">
+            {(isDashboardRoute ? isAdminAuthenticated : isEmployeeAuthenticated) ? (
+              <>
+                <span className="text-[11px] font-bold text-slate-600 hidden md:inline truncate max-w-[140px]">
+                  <i className="fa-regular fa-user mr-1 text-violet-500"></i>{currentUser.nama_lengkap}
+                </span>
+                <button 
+                  onClick={handleLogout}
+                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 active:scale-95 font-bold rounded-full transition flex items-center gap-1 text-[11px] border border-rose-200 shadow-xs"
+                  title="Keluar dari sesi ini"
+                >
+                  <i className="fa-solid fa-arrow-right-from-bracket text-xs"></i>
+                  <span className="hidden sm:inline">Keluar</span>
+                </button>
+              </>
+            ) : (
+              <span className="px-2.5 py-1 bg-amber-50 border border-amber-200/80 rounded-full text-[10px] font-bold text-amber-700 hidden sm:flex items-center gap-1">
+                <i className="fa-solid fa-lock text-[9px]"></i>
+                <span>Silakan Masuk</span>
+              </span>
+            )}
           </div>
         </header>
 
-        {/* Main Views Container */}
+        {/* Main Content: Render portal aktif atau form login yang sesuai */}
         <main className="flex-1 relative z-10">
-          {isAdmin ? (
-            <AdminDashboard 
-              karyawanList={karyawanList}
-              setKaryawanList={setKaryawanList}
-              presensiList={presensiList}
-              setPresensiList={setPresensiList}
-              lokasiList={lokasiList}
-              setLokasiList={setLokasiList}
-              divisiList={divisiList}
-              setDivisiList={setDivisiList}
-              jabatanList={jabatanList}
-              setJabatanList={setJabatanList}
-              shiftList={shiftList}
-              setShiftList={setShiftList}
-              pengumumanList={pengumumanList}
-              setPengumumanList={setPengumumanList}
-              adminList={adminList}
-              setAdminList={setAdminList}
-              lemburList={lemburList}
-              setLemburList={setLemburList}
-              klaimList={klaimList}
-              setKlaimList={setKlaimList}
-              toleransiMenit={toleransiMenit}
-              setToleransiMenit={setToleransiMenit}
-              showToast={showToast}
-              handleLogout={handleLogout}
-            />
+          {isDashboardRoute ? (
+            /* Rute #dashboard */
+            isAdminAuthenticated ? (
+              <AdminDashboard 
+                karyawanList={karyawanList}
+                setKaryawanList={setKaryawanList}
+                presensiList={presensiList}
+                setPresensiList={setPresensiList}
+                lokasiList={lokasiList}
+                setLokasiList={setLokasiList}
+                divisiList={divisiList}
+                setDivisiList={setDivisiList}
+                jabatanList={jabatanList}
+                setJabatanList={setJabatanList}
+                shiftList={shiftList}
+                setShiftList={setShiftList}
+                pengumumanList={pengumumanList}
+                setPengumumanList={setPengumumanList}
+                adminList={adminList}
+                setAdminList={setAdminList}
+                lemburList={lemburList}
+                setLemburList={setLemburList}
+                klaimList={klaimList}
+                setKlaimList={setKlaimList}
+                toleransiMenit={toleransiMenit}
+                setToleransiMenit={setToleransiMenit}
+                showToast={showToast}
+                handleLogout={handleLogout}
+              />
+            ) : (
+              /* Belum Login Admin pada #dashboard: Tampilkan Form Login Admin */
+              <AuthPortalView 
+                forcedRole="admin"
+                karyawanList={karyawanList}
+                adminList={adminList}
+                onLoginKaryawan={handleLoginKaryawan}
+                onLoginAdmin={handleLoginAdmin}
+                showToast={showToast}
+                navigateTo={navigateTo}
+              />
+            )
           ) : (
-            <KaryawanPortal 
-              currentUser={currentUser}
-              setCurrentUser={setCurrentUser}
-              karyawanList={karyawanList}
-              presensiList={presensiList}
-              setPresensiList={setPresensiList}
-              lokasiList={lokasiList}
-              divisiList={divisiList}
-              jabatanList={jabatanList}
-              shiftList={shiftList}
-              pengumumanList={pengumumanList}
-              lemburList={lemburList}
-              setLemburList={setLemburList}
-              klaimList={klaimList}
-              setKlaimList={setKlaimList}
-              toleransiMenit={toleransiMenit}
-              currentRoute={currentRoute}
-              navigateTo={navigateTo}
-              showToast={showToast}
-              handleLogout={handleLogout}
-            />
+            /* Rute Karyawan (Halaman Utama / #karyawan / #profil dll) */
+            isEmployeeAuthenticated ? (
+              <KaryawanPortal 
+                currentUser={currentUser}
+                setCurrentUser={setCurrentUser}
+                karyawanList={karyawanList}
+                presensiList={presensiList}
+                setPresensiList={setPresensiList}
+                lokasiList={lokasiList}
+                divisiList={divisiList}
+                jabatanList={jabatanList}
+                shiftList={shiftList}
+                pengumumanList={pengumumanList}
+                lemburList={lemburList}
+                setLemburList={setLemburList}
+                klaimList={klaimList}
+                setKlaimList={setKlaimList}
+                toleransiMenit={toleransiMenit}
+                currentRoute={currentRoute}
+                navigateTo={navigateTo}
+                showToast={showToast}
+                handleLogout={handleLogout}
+              />
+            ) : (
+              /* Belum Login Karyawan di Halaman Utama: Tampilkan Form Login Karyawan */
+              <AuthPortalView 
+                forcedRole="karyawan"
+                karyawanList={karyawanList}
+                adminList={adminList}
+                onLoginKaryawan={handleLoginKaryawan}
+                onLoginAdmin={handleLoginAdmin}
+                showToast={showToast}
+                navigateTo={navigateTo}
+              />
+            )
           )}
         </main>
 
@@ -735,12 +804,13 @@
   /* =========================================================
      KOMPONEN HALAMAN LOGIN (PORTAL KARYAWAN & ADMIN HRD)
      ========================================================= */
-  function AuthPortalView({ karyawanList, adminList, onLoginKaryawan, onLoginAdmin, showToast }) {
-    const [loginRole, setLoginRole] = useState('karyawan'); // 'karyawan' | 'admin'
+  function AuthPortalView({ forcedRole = 'karyawan', karyawanList, adminList, onLoginKaryawan, onLoginAdmin, showToast, navigateTo }) {
     const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+
+    const loginRole = forcedRole;
 
     const handleSubmit = (e) => {
       e.preventDefault();
@@ -761,52 +831,37 @@
     };
 
     // Quick Login Demo Helper
-    const applyDummyCredential = (user, role) => {
-      setLoginRole(role);
+    const applyDummyCredential = (user) => {
       setIdentifier(user.username);
       setPassword(user.password);
       showToast(`Kredensial ${user.nama_lengkap} disiapkan. Silakan klik Masuk.`, 'info');
     };
 
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 relative z-10">
-        <div className="max-w-md w-full bg-white/90 backdrop-blur-2xl rounded-[2.5rem] p-7 sm:p-9 border border-white/60 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.1)] relative overflow-hidden">
+      <div className="min-h-[calc(100vh-60px)] flex items-center justify-center p-4 sm:p-6 relative z-10">
+        <div className="max-w-md w-full bg-white/90 backdrop-blur-2xl rounded-[2.5rem] p-7 sm:p-9 border border-white/60 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.08)] relative overflow-hidden">
           
           {/* Logo & Header Title */}
           <div className="text-center mb-6">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-violet-600 to-fuchsia-600 text-white flex items-center justify-center mx-auto mb-3.5 shadow-lg shadow-violet-200">
-              <i className="fa-solid fa-fingerprint text-3xl"></i>
+            <div className={`w-16 h-16 rounded-2xl text-white flex items-center justify-center mx-auto mb-3.5 shadow-lg ${
+              loginRole === 'admin' 
+                ? 'bg-gradient-to-tr from-slate-800 to-slate-950 shadow-slate-300' 
+                : 'bg-gradient-to-tr from-violet-600 to-fuchsia-600 shadow-violet-200'
+            }`}>
+              <i className={`fa-solid ${loginRole === 'admin' ? 'fa-user-shield' : 'fa-fingerprint'} text-3xl`}></i>
             </div>
-            <h2 className="font-display font-extrabold text-2xl text-slate-800 tracking-tight">SURYATOKOKU</h2>
-            <p className="text-xs text-slate-500 font-medium mt-1">Presensi Digital & Human Resource Workspace</p>
-          </div>
-
-          {/* Tab Selector Role (Karyawan vs Admin HRD) */}
-          <div className="grid grid-cols-2 gap-1.5 p-1.5 bg-slate-100/90 rounded-2xl mb-6 border border-slate-200/50">
-            <button
-              type="button"
-              onClick={() => { setLoginRole('karyawan'); setIdentifier(''); setPassword(''); }}
-              className={`py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 ${
-                loginRole === 'karyawan'
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <i className="fa-solid fa-mobile-screen text-xs"></i>
-              <span>Karyawan</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { setLoginRole('admin'); setIdentifier(''); setPassword(''); }}
-              className={`py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 ${
-                loginRole === 'admin'
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <i className="fa-solid fa-user-shield text-xs"></i>
-              <span>Admin HRD</span>
-            </button>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold mb-2 border uppercase tracking-wider bg-slate-50 text-slate-600 border-slate-200">
+              <span className={`w-2 h-2 rounded-full ${loginRole === 'admin' ? 'bg-indigo-600' : 'bg-violet-600'}`}></span>
+              {loginRole === 'admin' ? 'Login Administrator HR' : 'Login Portal Karyawan'}
+            </div>
+            <h2 className="font-display font-extrabold text-2xl text-slate-800 tracking-tight">
+              {loginRole === 'admin' ? 'WORKSPACE HRD' : 'SURYATOKOKU'}
+            </h2>
+            <p className="text-xs text-slate-500 font-medium mt-1">
+              {loginRole === 'admin' 
+                ? 'Akses panel administrasi rekapan & master data' 
+                : 'Presensi digital, cuti, libur & riwayat kehadiran'}
+            </p>
           </div>
 
           {/* Form Login */}
@@ -858,7 +913,11 @@
             <button 
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 mt-2 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold text-xs shadow-lg shadow-slate-300 active:scale-95 transition flex items-center justify-center gap-2"
+              className={`w-full py-3.5 mt-2 text-white rounded-2xl font-bold text-xs shadow-lg active:scale-95 transition flex items-center justify-center gap-2 ${
+                loginRole === 'admin' 
+                  ? 'bg-slate-900 hover:bg-slate-800 shadow-slate-300' 
+                  : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 shadow-violet-200'
+              }`}
             >
               {isLoading ? (
                 <>
@@ -868,14 +927,14 @@
               ) : (
                 <>
                   <i className="fa-solid fa-right-to-bracket text-xs"></i>
-                  <span>Masuk Sebagai {loginRole === 'karyawan' ? 'Karyawan' : 'Admin'}</span>
+                  <span>Masuk Sebagai {loginRole === 'karyawan' ? 'Karyawan' : 'Admin HR'}</span>
                 </>
               )}
             </button>
           </form>
 
           {/* Quick Demo Acccount Switcher */}
-          <div className="mt-6 pt-5 border-t border-slate-100">
+          <div className="mt-5 pt-4 border-t border-slate-100">
             <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400 mb-2.5 text-center">
               Pilihan Akun Uji Coba Cepat (Demo):
             </p>
@@ -886,7 +945,7 @@
                     <button
                       key={k.id}
                       type="button"
-                      onClick={() => applyDummyCredential(k, 'karyawan')}
+                      onClick={() => applyDummyCredential(k)}
                       className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-violet-50 hover:border-violet-200 border border-slate-200/60 text-left text-[11px] flex items-center justify-between transition group"
                     >
                       <div className="truncate">
@@ -903,7 +962,7 @@
                     <button
                       key={a.id}
                       type="button"
-                      onClick={() => applyDummyCredential(a, 'admin')}
+                      onClick={() => applyDummyCredential(a)}
                       className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-violet-50 hover:border-violet-200 border border-slate-200/60 text-left text-[11px] flex items-center justify-between transition group"
                     >
                       <div className="truncate">
