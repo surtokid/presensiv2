@@ -50,7 +50,9 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Supabase UMD: dua sumber parser-blocking agar client tersedia sebelum Babel menjalankan aplikasi. -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
   <style>
     body {
@@ -125,14 +127,23 @@
 
     let supabase = null;
     try {
-      if (window.supabase && SUPABASE_URL) {
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      // UMD build menempatkan createClient pada window.supabase.
+      const supabaseLibrary = window.supabase;
+      if (supabaseLibrary && typeof supabaseLibrary.createClient === 'function') {
+        supabase = supabaseLibrary.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.info('[Supabase] Client berhasil dibuat untuk project:', new URL(SUPABASE_URL).host);
+      } else {
+        console.error('[Supabase] Library tidak ditemukan. Periksa Network/Console dan pastikan CDN tidak diblokir ekstensi, firewall, atau CSP.', {
+          windowSupabaseType: typeof window.supabase,
+          url: SUPABASE_URL
+        });
       }
     } catch(e) {
-      console.error("Supabase initialization error:", e);
+      console.error('[Supabase] Gagal membuat client:', e);
+      supabase = null;
     }
     if (!supabase) {
-      console.error('Supabase client tidak terbentuk. Pastikan CDN @supabase/supabase-js dapat dimuat dan URL/anon key benar.');
+      console.error('[Supabase] Client belum tersedia. Coba buka aplikasi tanpa ad blocker atau jaringan yang memblokir CDN.');
     }
 
     // Helper mutasi database: UI hanya diubah setelah Supabase mengonfirmasi sukses.
@@ -311,7 +322,7 @@
     // Sinkronisasi data awal dari Supabase
     useEffect(() => {
       if (!supabase) {
-        showToast('Supabase belum tersambung. Periksa koneksi internet dan pemuatan library Supabase.', 'error');
+        showToast('Library Supabase belum termuat. Muat ulang halaman; jika berlanjut, periksa Console dan pemblokiran CDN.', 'error');
         return;
       }
 
