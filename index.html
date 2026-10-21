@@ -1142,7 +1142,7 @@
           {/* Hero Header Card (Solid Light Color) */}
           <div className="bg-[#fff0f3] text-slate-800 p-6 rounded-b-[2.5rem] border-b border-rose-100 shadow-[0_15px_40px_-15px_rgba(0,0,0,0.05)] relative z-20">
             <div className="flex items-center justify-between mb-5 relative z-10">
-              <div className="flex items-center space-x-3.5">
+              <div className="flex items-center space-x-3.5 min-w-0 flex-1">
                 <div className="w-14 h-14 rounded-full bg-white p-1 border border-rose-200 shadow-sm flex items-center justify-center overflow-hidden">
                   {currentUser.foto_profil ? (
                     <img src={getCleanImageUrl(currentUser.foto_profil)} alt={currentUser.nama_lengkap} className="w-full h-full rounded-full object-cover" />
@@ -1152,8 +1152,8 @@
                     </span>
                   )}
                 </div>
-                <div>
-                  <h1 className="font-display font-bold text-lg tracking-tight leading-snug text-slate-900 shadow-sm">{currentUser.nama_lengkap}</h1>
+                <div className="min-w-0 flex-1">
+                  <h1 className="font-display font-bold tracking-tight leading-snug text-slate-900 whitespace-nowrap overflow-hidden" style={{ fontSize: (String(currentUser.nama_lengkap || '').length > 24 ? '12px' : (String(currentUser.nama_lengkap || '').length > 18 ? '14px' : '18px')) }} title={currentUser.nama_lengkap}>{currentUser.nama_lengkap}</h1>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span className="px-2.5 py-0.5 bg-rose-200 text-rose-700 text-[11px] font-semibold rounded-full">
                       {currentUser.divisi}
@@ -1168,18 +1168,6 @@
               </div>
 
               {}
-              <button 
-                onClick={() => navigateTo('#daftar-pengumuman')} 
-                className="relative w-10 h-10 rounded-full bg-white hover:bg-rose-50 active:scale-95 flex items-center justify-center border border-rose-200 transition shadow-sm"
-                title="Daftar Pengumuman"
-              >
-                <i className="fa-regular fa-bell text-slate-700 text-sm"></i>
-                {pengumumanList && pengumumanList.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center shadow-sm">
-                    {pengumumanList.length}
-                  </span>
-                )}
-              </button>
             </div>
 
             {/* Attendance Box */}
@@ -1798,11 +1786,13 @@
         if (!mapInstanceRef.current) {
           const map = L.map(mapContainerRef.current, {
             zoomControl: false,
-            attributionControl: false
+            attributionControl: true
           }).setView([selectedLokasi.latitude, selectedLokasi.longitude], 16);
 
-          L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            maxZoom: 19
+          // Tile OpenStreetMap tidak memerlukan API key, sehingga menghindari pesan API KEY REQUIRED.
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
           }).addTo(map);
 
           mapInstanceRef.current = map;
@@ -2026,6 +2016,17 @@
                 {/* Wadah Peta Leaflet */}
                 <div className="relative h-44 w-full rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-100">
                   <div ref={mapContainerRef} className="w-full h-full"></div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const coords = userCoords || { lat: selectedLokasi.latitude, lng: selectedLokasi.longitude };
+                      window.open(`https://www.google.com/maps?q=${coords.lat},${coords.lng}`, '_blank', 'noopener,noreferrer');
+                    }}
+                    className="absolute top-2 right-2 z-[450] bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg px-2.5 py-1.5 text-[10px] font-bold shadow-md"
+                    title="Buka titik lokasi di Google Maps"
+                  >
+                    <i className="fa-solid fa-map-location-dot mr-1.5 text-emerald-600"></i>Google Maps
+                  </button>
                   {gpsLoading && (
                     <div className="absolute inset-0 bg-white/85 backdrop-blur-xs flex flex-col items-center justify-center text-xs font-bold text-slate-600 z-[400]">
                       <i className="fa-solid fa-location-crosshairs fa-spin text-xl text-violet-600 mb-1.5"></i>
