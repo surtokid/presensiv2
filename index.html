@@ -102,6 +102,29 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
+    // Gunakan tanggal lokal perangkat (zona waktu Indonesia), bukan UTC.
+    // Ini mencegah tanggal presensi bergeser saat pergantian hari.
+    function getLocalDateKey(date = new Date()) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function formatDateDMY(dateKey) {
+      if (!dateKey) return '';
+      const match = String(dateKey).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      return match ? `${match[3]}/${match[2]}/${match[1]}` : dateKey;
+    }
+
+    function shiftDateKey(dateKey, days) {
+      const parts = String(dateKey || '').split('-').map(Number);
+      if (parts.length !== 3 || parts.some(Number.isNaN)) return getLocalDateKey();
+      const date = new Date(parts[0], parts[1] - 1, parts[2]);
+      date.setDate(date.getDate() + days);
+      return getLocalDateKey(date);
+    }
+
     // Supabase & Google Drive via Google Apps Script (GAS) Configuration
     const SUPABASE_URL = "https://hxpoajftzysfsxgjcgex.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4cG9hamZ0enlzZnN4Z2pjZ2V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MDA1OTUsImV4cCI6MjEwNzk3NjU5NX0.2_LNfRj9B54uINQNMO4zecN3no8B6mYl07fNJ0mYHqM";
@@ -1042,7 +1065,7 @@
         return { masuk, libur, izin, sakit, cuti };
       }, [presensiList, currentUser.id, payrollCycle]);
 
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getLocalDateKey();
       const todayAttendanceMasuk = presensiList.find(p => p.karyawan_id === currentUser.id && p.tanggal === todayStr && p.tipe === 'masuk');
       const todayAttendanceKeluar = presensiList.find(p => p.karyawan_id === currentUser.id && p.tanggal === todayStr && p.tipe === 'keluar');
 
@@ -1916,7 +1939,7 @@
         }
 
         const now = new Date();
-        const dateStr = now.toISOString().split('T')[0];
+        const dateStr = getLocalDateKey(now);
         const timeStr = [now.getHours(), now.getMinutes(), now.getSeconds()].map(v => String(v).padStart(2, '0')).join(':');
 
         // Unggah foto selfie ke Google Drive via GAS Web App
@@ -2206,7 +2229,7 @@
       const handleSubmit = async () => {
         setIsSubmitting(true);
         const now = new Date();
-        const dateStr = now.toISOString().split('T')[0];
+        const dateStr = getLocalDateKey(now);
 
         // Unggah foto bukti ke Google Drive via GAS jika ada
         let uploadedBuktiUrl = fotoBukti;
@@ -2451,7 +2474,7 @@
 
     function StatusRekanView({ karyawanList, presensiList }) {
       const [filterStatus, setFilterStatus] = React.useState('Semua');
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getLocalDateKey();
 
       // Hitung jumlah rekan untuk masing-masing filter secara real-time hari ini
       const counts = useMemo(() => {
@@ -2889,7 +2912,7 @@
     }) {
       const [activeModule, setActiveModule] = useState('harian'); 
       const [sidebarPinned, setSidebarPinned] = useState(true);
-      const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+      const [selectedDate, setSelectedDate] = useState(getLocalDateKey());
       const [filterStatusHarian, setFilterStatusHarian] = useState('Semua');
       const [previewPhotoUrl, setPreviewPhotoUrl] = useState(null);
       const [editingPresensiModal, setEditingPresensiModal] = useState(null);
@@ -3095,9 +3118,7 @@
                     {/* Tombol Panah Kiri (Hari Sebelumnya) */}
                     <button 
                       onClick={() => {
-                        const cur = new Date(selectedDate);
-                        cur.setDate(cur.getDate() - 1);
-                        setSelectedDate(cur.toISOString().split('T')[0]);
+                        setSelectedDate(shiftDateKey(selectedDate, -1));
                       }}
                       className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-600 flex items-center justify-center transition active:scale-95 shadow-sm"
                       title="Hari Sebelumnya"
@@ -3109,6 +3130,7 @@
                     <input 
                       type="date" 
                       value={selectedDate} 
+                      title={`Tanggal: ${formatDateDMY(selectedDate)}`} 
                       onChange={(e) => setSelectedDate(e.target.value)} 
                       className="bg-transparent border-0 text-xs font-bold rounded-xl px-3 py-1.5 outline-none font-mono-numbers text-slate-700 cursor-pointer" 
                     />
@@ -3116,9 +3138,7 @@
                     {/* Tombol Panah Kanan (Hari Berikutnya) */}
                     <button 
                       onClick={() => {
-                        const cur = new Date(selectedDate);
-                        cur.setDate(cur.getDate() + 1);
-                        setSelectedDate(cur.toISOString().split('T')[0]);
+                        setSelectedDate(shiftDateKey(selectedDate, 1));
                       }}
                       className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-600 flex items-center justify-center transition active:scale-95 shadow-sm"
                       title="Hari Berikutnya"
@@ -3395,7 +3415,7 @@
                         <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                           <i className="fa-solid fa-arrow-right-to-bracket text-emerald-500"></i> Presensi Masuk
                         </span>
-                        <span className="text-[10px] text-slate-400">{selectedDate}</span>
+                        <span className="text-[10px] text-slate-400">{formatDateDMY(selectedDate)}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
@@ -3439,7 +3459,7 @@
                         <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                           <i className="fa-solid fa-arrow-right-from-bracket text-rose-500"></i> Presensi Pulang
                         </span>
-                        <span className="text-[10px] text-slate-400">{selectedDate}</span>
+                        <span className="text-[10px] text-slate-400">{formatDateDMY(selectedDate)}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
