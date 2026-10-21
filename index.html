@@ -379,6 +379,91 @@
       setTimeout(() => setToast(null), 3500);
     };
 
+    // Pembungkus setter untuk memastikan perubahan CRUD dari modul admin
+    // benar-benar tersimpan ke Supabase, bukan hanya berubah di state React.
+    const syncedListRefs = useRef({});
+    syncedListRefs.current = {
+      karyawan: karyawanList,
+      lokasi: lokasiList,
+      divisi: divisiList,
+      jabatan: jabatanList,
+      shift: shiftList,
+      admin: adminList,
+      pengumuman: pengumumanList,
+      lembur: lemburList,
+      klaim: klaimList
+    };
+
+    const makeSyncedSetter = (key, table, originalSetter) => (action) => {
+      const previous = Array.isArray(syncedListRefs.current[key]) ? syncedListRefs.current[key] : [];
+      const next = typeof action === 'function' ? action(previous) : action;
+      if (!Array.isArray(next)) {
+        originalSetter(action);
+        return;
+      }
+      // Update ref segera agar dua perubahan berurutan tidak memakai snapshot lama.
+      syncedListRefs.current[key] = next;
+      originalSetter(next);
+
+      (async () => {
+        try {
+          const client = await getSupabaseClient();
+          const oldById = new Map(previous.filter(x => x && x.id != null).map(x => [String(x.id), x]));
+          const newById = new Map(next.filter(x => x && x.id != null).map(x => [String(x.id), x]));
+          const removedIds = [...oldById.keys()].filter(id => !newById.has(id));
+          const changedRows = [...newById.values()].filter(row => {
+            const old = oldById.get(String(row.id));
+            return !old || JSON.stringify(old) !== JSON.stringify(row);
+          });
+
+          if (changedRows.length) {
+            const { error } = await client.from(table).upsert(changedRows, { onConflict: 'id' });
+            if (error) throw error;
+          }
+          for (const id of removedIds) {
+            const { error } = await client.from(table).delete().eq('id', id);
+            if (error) throw error;
+          }
+        } catch (error) {
+          console.error(`Gagal sinkronisasi perubahan ke tabel ${table}:`, error);
+          // Rollback state lokal bila perubahan yang gagal masih merupakan perubahan terbaru.
+          if (syncedListRefs.current[key] === next) {
+            syncedListRefs.current[key] = previous;
+            originalSetter(previous);
+          }
+          showToast(`Gagal menyimpan ke Supabase (${table}): ${error.message || 'periksa koneksi, struktur kolom, dan RLS'}`, 'error');
+        }
+      })();
+    };
+
+    const setKaryawanListSynced = makeSyncedSetter('karyawan', 'master_karyawan', setKaryawanList);
+    const setLokasiListSynced = makeSyncedSetter('lokasi', 'master_lokasi', setLokasiList);
+    const setDivisiListSynced = makeSyncedSetter('divisi', 'master_divisi', setDivisiList);
+    const setJabatanListSynced = makeSyncedSetter('jabatan', 'master_jabatan', setJabatanList);
+    const setShiftListSynced = makeSyncedSetter('shift', 'master_shift', setShiftList);
+    const setAdminListSynced = makeSyncedSetter('admin', 'master_admin', setAdminList);
+    const setPengumumanListSynced = makeSyncedSetter('pengumuman', 'pengumuman', setPengumumanList);
+    const setLemburListSynced = makeSyncedSetter('lembur', 'pengajuan_lembur', setLemburList);
+    const setKlaimListSynced = makeSyncedSetter('klaim', 'klaim_kehadiran', setKlaimList);
+
+    const setToleransiMenitSynced = (valueOrUpdater) => {
+      const value = typeof valueOrUpdater === 'function' ? valueOrUpdater(toleransiMenit) : valueOrUpdater;
+      setToleransiMenit(value);
+      (async () => {
+        try {
+          const client = await getSupabaseClient();
+          const { error } = await client.from('settings').upsert(
+            { key: 'toleransi_menit', value: String(value) },
+            { onConflict: 'key' }
+          );
+          if (error) throw error;
+        } catch (error) {
+          console.error('Gagal menyimpan settings toleransi:', error);
+          showToast(`Gagal menyimpan toleransi ke Supabase: ${error.message || 'periksa tabel settings/RLS'}`, 'error');
+        }
+      })();
+    };
+
     useEffect(() => {
       const handleHashChange = () => {
         setCurrentRoute(window.location.hash || '#karyawan');
@@ -559,27 +644,27 @@
             isAdminAuthenticated ? (
               <AdminDashboard 
                 karyawanList={karyawanList}
-                setKaryawanList={setKaryawanList}
+                setKaryawanList={setKaryawanListSynced}
                 presensiList={presensiList}
                 setPresensiList={setPresensiList}
                 lokasiList={lokasiList}
-                setLokasiList={setLokasiList}
+                setLokasiList={setLokasiListSynced}
                 divisiList={divisiList}
-                setDivisiList={setDivisiList}
+                setDivisiList={setDivisiListSynced}
                 jabatanList={jabatanList}
-                setJabatanList={setJabatanList}
+                setJabatanList={setJabatanListSynced}
                 shiftList={shiftList}
-                setShiftList={setShiftList}
+                setShiftList={setShiftListSynced}
                 pengumumanList={pengumumanList}
-                setPengumumanList={setPengumumanList}
+                setPengumumanList={setPengumumanListSynced}
                 adminList={adminList}
-                setAdminList={setAdminList}
+                setAdminList={setAdminListSynced}
                 lemburList={lemburList}
-                setLemburList={setLemburList}
+                setLemburList={setLemburListSynced}
                 klaimList={klaimList}
-                setKlaimList={setKlaimList}
+                setKlaimList={setKlaimListSynced}
                 toleransiMenit={toleransiMenit}
-                setToleransiMenit={setToleransiMenit}
+                setToleransiMenit={setToleransiMenitSynced}
                 showToast={showToast}
                 handleLogout={handleLogout}
               />
@@ -610,9 +695,9 @@
                 shiftList={shiftList}
                 pengumumanList={pengumumanList}
                 lemburList={lemburList}
-                setLemburList={setLemburList}
+                setLemburList={setLemburListSynced}
                 klaimList={klaimList}
-                setKlaimList={setKlaimList}
+                setKlaimList={setKlaimListSynced}
                 toleransiMenit={toleransiMenit}
                 currentRoute={currentRoute}
                 navigateTo={navigateTo}
