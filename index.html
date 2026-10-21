@@ -3,8 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Suryatokoku - Presensi & HRIS Modern</title>
-  <link rel="icon" type="image/png" href="Logo Surtok.png">
+  <title>App Surtok</title>
+  <link rel="icon" type="image/png" href="./Logo%20Surtok.png">
+  <link rel="apple-touch-icon" href="./Logo%20Surtok.png">
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#ec4899">
+  <meta name="application-name" content="App Surtok">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="App Surtok">
   
   <!-- Google Fonts: Plus Jakarta Sans & Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -101,6 +108,58 @@
   <!-- Main Babel Script containing all HRIS & Presensi components -->
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
+
+    // PWA install prompt: browser hanya menyediakan prompt pada kondisi yang memenuhi syarat.
+    let deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      window.dispatchEvent(new Event('pwa-install-available'));
+    });
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      window.dispatchEvent(new Event('pwa-app-installed'));
+    });
+    if ('serviceWorker' in navigator && /^https?:$/.test(window.location.protocol)) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((error) => {
+          console.warn('Service worker tidak dapat didaftarkan:', error);
+        });
+      });
+    }
+
+    async function requestPwaInstall(showToast) {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      if (isStandalone) {
+        showToast('Aplikasi sudah terpasang di perangkat ini');
+        return;
+      }
+      if (deferredInstallPrompt) {
+        const installEvent = deferredInstallPrompt;
+        deferredInstallPrompt = null;
+        try {
+          await installEvent.prompt();
+          const choice = await installEvent.userChoice;
+          if (choice && choice.outcome === 'accepted') {
+            showToast('Permintaan instalasi diterima. Ikuti konfirmasi browser jika muncul.');
+          } else {
+            showToast('Instalasi dibatalkan. Anda bisa mencoba lagi kapan saja.', 'error');
+          }
+        } catch (error) {
+          console.error('PWA install gagal:', error);
+          showToast('Instalasi belum dapat dimulai. Buka menu browser lalu pilih Install app / Tambahkan ke layar utama.', 'error');
+        }
+        return;
+      }
+      const ua = navigator.userAgent || '';
+      if (/iphone|ipad|ipod/i.test(ua)) {
+        showToast('Di iPhone/iPad: tekan Bagikan, lalu pilih Tambahkan ke Layar Utama.');
+      } else if (/android/i.test(ua)) {
+        showToast('Buka menu ⋮ Chrome, lalu pilih Instal aplikasi atau Tambahkan ke layar utama. Pastikan halaman dibuka lewat HTTPS.');
+      } else {
+        showToast('Browser belum menyediakan tombol instal otomatis. Gunakan menu browser lalu pilih Install app / Instal halaman ini. Pastikan aplikasi dibuka lewat HTTPS.');
+      }
+    }
 
     // Gunakan tanggal lokal perangkat (zona waktu Indonesia), bukan UTC.
     // Ini mencegah tanggal presensi bergeser saat pergantian hari.
@@ -2844,7 +2903,7 @@
               </div>
               <i className="fa-solid fa-chevron-right text-xs text-slate-300"></i>
             </a>
-            <button onClick={() => showToast('Aplikasi siap di-install')} className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-slate-50 transition">
+            <button onClick={() => requestPwaInstall(showToast)} className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-slate-50 transition">
               <div className="flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-full bg-slate-50 text-slate-600 flex items-center justify-center"><i className="fa-solid fa-download text-xs"></i></div>
                 <span className="text-xs font-bold text-slate-700">Install App</span>
@@ -2898,7 +2957,9 @@
       const [activeModule, setActiveModule] = useState('harian'); 
       const [sidebarPinned, setSidebarPinned] = useState(true);
       const [selectedDate, setSelectedDate] = useState(getLocalDateKey());
+      const [dateDraftHarian, setDateDraftHarian] = useState(formatDateDMY(getLocalDateKey()));
       const [filterStatusHarian, setFilterStatusHarian] = useState('Semua');
+      const kalenderHarianRef = useRef(null);
       const [previewPhotoUrl, setPreviewPhotoUrl] = useState(null);
       const [editingPresensiModal, setEditingPresensiModal] = useState(null);
       const [deleteConfirmState, setDeleteConfirmState] = useState(null);
@@ -3111,14 +3172,42 @@
                       <i className="fa-solid fa-chevron-left text-xs"></i>
                     </button>
 
-                    {/* Input Kalender Tanggal */}
-                    <input 
-                      type="date" 
-                      value={selectedDate} 
-                      title={`Tanggal: ${formatDateDMY(selectedDate)}`} 
-                      onChange={(e) => setSelectedDate(e.target.value)} 
-                      className="bg-transparent border-0 text-xs font-bold rounded-xl px-3 py-1.5 outline-none font-mono-numbers text-slate-700 cursor-pointer" 
+                    {/* Tanggal ditampilkan konsisten dalam format Indonesia dd/mm/yyyy */}
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={dateDraftHarian}
+                      title="Tanggal (dd/mm/yyyy)"
+                      aria-label="Filter tanggal, format dd/mm/yyyy"
+                      placeholder="dd/mm/yyyy"
+                      onChange={(e) => setDateDraftHarian(e.target.value)}
+                      onBlur={() => {
+                        const match = dateDraftHarian.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                        if (match) {
+                          const day = Number(match[1]), month = Number(match[2]), year = Number(match[3]);
+                          const candidate = new Date(year, month - 1, day);
+                          if (candidate.getFullYear() === year && candidate.getMonth() === month - 1 && candidate.getDate() === day) {
+                            setSelectedDate(`${year}-${match[2]}-${match[1]}`);
+                          } else setDateDraftHarian(formatDateDMY(selectedDate));
+                        } else setDateDraftHarian(formatDateDMY(selectedDate));
+                      }}
+                      className="w-[100px] bg-transparent border-0 text-xs text-center font-bold rounded-xl px-1 py-1.5 outline-none font-mono-numbers text-slate-700"
                     />
+                    <input
+                      ref={kalenderHarianRef}
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                      className="sr-only"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { if (kalenderHarianRef.current) { if (kalenderHarianRef.current.showPicker) kalenderHarianRef.current.showPicker(); else kalenderHarianRef.current.click(); } }}
+                      className="w-8 h-8 rounded-lg text-violet-600 hover:bg-violet-50 flex items-center justify-center"
+                      title="Pilih tanggal dari kalender"
+                    ><i className="fa-regular fa-calendar text-sm"></i></button>
 
                     {/* Tombol Panah Kanan (Hari Berikutnya) */}
                     <button 
@@ -3132,8 +3221,62 @@
                     </button>
                   </div>
                 </div>
-                <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
-                  <div className="overflow-x-auto">
+                {(() => {
+                  const statusFor = (k) => {
+                    const att = presensiList.find(item => item.karyawan_id === k.id && item.tanggal === selectedDate && item.tipe === 'masuk');
+                    if (!att) return 'Belum masuk';
+                    if (att.status === 'Hadir' || att.status === 'Terlambat' || att.status === 'Masuk') return 'Masuk';
+                    const normalized = String(att.status || '').toLowerCase();
+                    if (normalized === 'belum absen' || normalized === 'belum masuk' || normalized === 'belum') return 'Belum masuk';
+                    if (normalized === 'libur') return 'Libur';
+                    if (normalized === 'izin') return 'Izin';
+                    if (normalized === 'sakit') return 'Sakit';
+                    if (normalized === 'cuti') return 'Cuti';
+                    return 'Belum masuk';
+                  };
+                  const statusFilters = ['Masuk', 'Belum masuk', 'Libur', 'Izin', 'Sakit', 'Cuti'];
+                  const statusCounts = statusFilters.reduce((acc, status) => {
+                    acc[status] = karyawanList.filter(k => statusFor(k) === status).length;
+                    return acc;
+                  }, {});
+                  const visibleEmployees = [...karyawanList]
+                    .filter(k => filterStatusHarian === 'Semua' || statusFor(k) === filterStatusHarian)
+                    .sort((a, b) => a.nama_lengkap.localeCompare(b.nama_lengkap));
+                  return <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+                      {statusFilters.map(status => {
+                        const active = filterStatusHarian === status;
+                        const palette = {
+                          'Masuk': { active: 'bg-emerald-600 border-emerald-600', hover: 'hover:border-emerald-200', number: 'text-emerald-600' },
+                          'Belum masuk': { active: 'bg-slate-800 border-slate-800', hover: 'hover:border-slate-300', number: 'text-slate-700' },
+                          'Libur': { active: 'bg-sky-600 border-sky-600', hover: 'hover:border-sky-200', number: 'text-sky-600' },
+                          'Izin': { active: 'bg-orange-500 border-orange-500', hover: 'hover:border-orange-200', number: 'text-orange-600' },
+                          'Sakit': { active: 'bg-amber-500 border-amber-500', hover: 'hover:border-amber-200', number: 'text-amber-600' },
+                          'Cuti': { active: 'bg-purple-600 border-purple-600', hover: 'hover:border-purple-200', number: 'text-purple-600' }
+                        }[status];
+                        return (
+                          <button
+                            key={status}
+                            type="button"
+                            onClick={() => setFilterStatusHarian(current => current === status ? 'Semua' : status)}
+                            aria-pressed={active}
+                            className={`text-left p-4 rounded-3xl border transition shadow-sm ${active ? `${palette.active} text-white shadow-md` : `bg-white text-slate-700 border-slate-100 ${palette.hover}`}`}
+                          >
+                            <span className="text-[10px] font-bold uppercase tracking-wider block opacity-75">{status}</span>
+                            <span className={`font-mono-numbers text-2xl font-extrabold mt-1 block ${active ? 'text-white' : palette.number}`}>{statusCounts[status]}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {filterStatusHarian !== 'Semua' && (
+                      <div className="flex justify-end -mt-2">
+                        <button type="button" onClick={() => setFilterStatusHarian('Semua')} className="px-3 py-2 rounded-full text-xs font-bold text-violet-600 hover:bg-violet-50 transition">
+                          <i className="fa-solid fa-rotate-left mr-1.5"></i>Reset filter
+                        </button>
+                      </div>
+                    )}
+                    <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                      <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
                         <tr className="bg-slate-50 text-slate-400 uppercase font-bold border-b border-slate-100 text-[10px] tracking-wider">
@@ -3149,8 +3292,7 @@
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
-                        {[...karyawanList]
-                          .sort((a, b) => a.nama_lengkap.localeCompare(b.nama_lengkap))
+                        {visibleEmployees
                           .map((k, i) => {
                             const m = presensiList.find(p => p.karyawan_id === k.id && p.tanggal === selectedDate && p.tipe === 'masuk');
                             const p = presensiList.find(p => p.karyawan_id === k.id && p.tanggal === selectedDate && p.tipe === 'keluar');
@@ -3276,8 +3418,10 @@
                         })}
                       </tbody>
                     </table>
-                  </div>
-                </div>
+                      </div>
+                    </div>
+                  </>;
+                })()}
               </div>
             )}
 
