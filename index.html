@@ -162,36 +162,44 @@
       }
     }
 
-    // Fungsi Pengunggah Media ke Google Drive melalui Google Apps Script Web App
+    // Upload media ke Google Drive melalui Google Apps Script Web App.
+    // Kontrak disamakan dengan Code.gs: payload.filename dan respons result.url.
     const uploadToGoogleDriveViaGAS = async (base64Image, fileName = '', subFolder = 'presensi') => {
       if (!base64Image || !base64Image.startsWith('data:image')) {
-        return base64Image || '';
+        throw new Error('Data foto tidak valid atau belum dipilih.');
       }
-      if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL.includes("YOUR_DEPLOYMENT_ID")) {
-        return base64Image;
+      if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL.includes('YOUR_DEPLOYMENT_ID')) {
+        throw new Error('URL Google Apps Script belum dikonfigurasi pada aplikasi.');
       }
       try {
         const payload = {
           image: base64Image,
-          name: fileName || `${subFolder}_${Date.now()}.jpg`,
-          subFolder: subFolder,
+          filename: fileName || `${subFolder}_${Date.now()}.jpg`,
           folderId: GOOGLE_DRIVE_FOLDER_ID
         };
         const response = await fetch(GAS_WEB_APP_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          redirect: 'follow'
         });
-        const result = await response.json();
-        if (result && result.status === 'success' && result.fileUrl) {
-          return result.fileUrl;
-        } else {
-          console.warn("Respon GAS tidak sukses, fallback ke base64:", result);
-          return base64Image;
+        const responseText = await response.text();
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch (_) {
+          throw new Error(`Respons Google Apps Script bukan JSON yang valid (HTTP ${response.status}). Pastikan URL Web App dan deployment benar.`);
         }
+        if (!response.ok) {
+          throw new Error(`Google Apps Script mengembalikan HTTP ${response.status}: ${result.message || response.statusText}`);
+        }
+        if (result && result.status === 'success' && (result.url || result.webViewLink)) {
+          return result.url || result.webViewLink;
+        }
+        throw new Error((result && result.message) || 'Google Apps Script tidak mengembalikan URL file. Periksa izin folder dan deployment.');
       } catch (err) {
-        console.error("Gagal mengunggah foto ke Google Drive:", err);
-        return base64Image;
+        console.error('Gagal mengunggah foto ke Google Drive:', err);
+        throw err instanceof Error ? err : new Error(String(err));
       }
     };
 
@@ -1882,7 +1890,7 @@
 
         const now = new Date();
         const dateStr = now.toISOString().split('T')[0];
-        const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const timeStr = [now.getHours(), now.getMinutes(), now.getSeconds()].map(v => String(v).padStart(2, '0')).join(':');
 
         // Unggah foto selfie ke Google Drive via GAS Web App
         let uploadedPhotoUrl = capturedPhoto;
@@ -2225,7 +2233,7 @@
           foto_url: uploadedBuktiUrl,
           keterangan: keterangan || `Pengajuan ${type}`,
           tanggal: dateStr,
-          jam: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          jam: [now.getHours(), now.getMinutes(), now.getSeconds()].map(v => String(v).padStart(2, '0')).join(':'),
           created_at: now.toISOString()
         };
 
