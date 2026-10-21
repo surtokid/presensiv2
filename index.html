@@ -6,7 +6,7 @@
   <title>App Surtok</title>
   <link rel="icon" type="image/png" href="./Logo%20Surtok.png">
   <link rel="apple-touch-icon" href="./Logo%20Surtok.png">
-  <link rel="manifest" href="./manifest.json">
+  <link rel="manifest" href="./manifest.json?v=app-surtok-v2">
   <meta name="theme-color" content="#ec4899">
   <meta name="application-name" content="App Surtok">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -141,7 +141,7 @@
           await installEvent.prompt();
           const choice = await installEvent.userChoice;
           if (choice && choice.outcome === 'accepted') {
-            showToast('Permintaan instalasi diterima. Ikuti konfirmasi browser jika muncul.');
+            showToast('Konfirmasi instalasi diterima browser. Jika ikon belum muncul, periksa daftar aplikasi atau menu browser.');
           } else {
             showToast('Instalasi dibatalkan. Anda bisa mencoba lagi kapan saja.', 'error');
           }
