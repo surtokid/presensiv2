@@ -1,13 +1,13 @@
-
 {
   "id": "./",
   "name": "App Surtok",
   "short_name": "App Surtok",
-  "description": "Aplikasi presensi karyawan Surtok",
-  "start_url": "./",
+  "description": "Aplikasi presensi dan HRIS Surtok",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "orientation": "portrait",
+  "background_color": "#F8FAFC",
   "theme_color": "#ec4899",
   "icons": [
     {
@@ -20,7 +20,7 @@
       "src": "./Logo%20Surtok.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ]
 }
