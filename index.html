@@ -430,10 +430,10 @@
             // bukan kolom terpisah `provinsi`, `kota`, atau `jalan`.
             const rowsForDatabase = table === 'master_karyawan'
               ? changedRows.map(row => {
-                  const { provinsi, kota, jalan, ...dbRow } = row;
+                  const { provinsi, kota, kecamatan, desa, kelurahan, jalan, ...dbRow } = row;
                   // Bila ada detail alamat dari formulir, pastikan semuanya
                   // tetap tersimpan pada kolom alamat yang didukung skema.
-                  if (provinsi !== undefined || kota !== undefined || jalan !== undefined) {
+                  if (provinsi !== undefined || kota !== undefined || kecamatan !== undefined || desa !== undefined || kelurahan !== undefined || jalan !== undefined) {
                     let alamat = {};
                     try {
                       alamat = typeof dbRow.alamat === 'string'
@@ -444,6 +444,9 @@
                       ...alamat,
                       ...(provinsi !== undefined ? { provinsi } : {}),
                       ...(kota !== undefined ? { kota } : {}),
+                      ...(kecamatan !== undefined ? { kecamatan } : {}),
+                      ...(desa !== undefined ? { desa } : {}),
+                      ...(kelurahan !== undefined ? { kelurahan } : {}),
                       ...(jalan !== undefined ? { jalan } : {})
                     });
                   }
@@ -1863,13 +1866,37 @@
       }, [step, capturedPhoto]);
 
       const captureSelfie = () => {
-        if (!videoRef.current) return;
+        const video = videoRef.current;
+        if (!video || !video.videoWidth || !video.videoHeight) {
+          showToast('Kamera belum siap. Tunggu sebentar lalu coba ambil foto lagi.', 'error');
+          return;
+        }
+
+        // Gunakan rasio asli kamera agar hasil foto tidak gepeng atau memanjang.
+        // Batasi sisi terpanjang maksimal 1280 px agar ukuran file tetap wajar.
+        const sourceWidth = video.videoWidth;
+        const sourceHeight = video.videoHeight;
+        const scale = Math.min(1, 1280 / Math.max(sourceWidth, sourceHeight));
+        const outputWidth = Math.max(1, Math.round(sourceWidth * scale));
+        const outputHeight = Math.max(1, Math.round(sourceHeight * scale));
         const canvas = document.createElement('canvas');
-        canvas.width = 640; canvas.height = 480;
+        canvas.width = outputWidth;
+        canvas.height = outputHeight;
+
         const ctx = canvas.getContext('2d');
-        ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
-        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        setCapturedPhoto(canvas.toDataURL('image/jpeg', 0.85));
+        if (!ctx) {
+          showToast('Tidak dapat memproses foto kamera. Silakan coba lagi.', 'error');
+          return;
+        }
+
+        // Cerminkan horizontal seperti preview kamera depan, tanpa mengubah rasio vertikal.
+        ctx.save();
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        setCapturedPhoto(canvas.toDataURL('image/jpeg', 0.88));
         if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
       };
 
@@ -4529,11 +4556,60 @@
         email: '', 
         divisi: divisiList[0]?.nama_divisi || '', 
         jabatan: '', 
-        provinsi: 'Jawa Barat', 
-        kota: 'Kota Bandung', 
+        provinsi: '',
+        kota: '',
+        kecamatan: '',
+        desa: '',
         jalan: '',
         foto_profil: ''
       });
+
+      // Dropdown wilayah administratif Indonesia (Provinsi > Kabupaten/Kota > Kecamatan > Desa/Kelurahan)
+      const WILAYAH_API = 'https://www.emsifa.com/api-wilayah-indonesia/api';
+      const [provinceOptions, setProvinceOptions] = useState([]);
+      const [regencyOptions, setRegencyOptions] = useState([]);
+      const [districtOptions, setDistrictOptions] = useState([]);
+      const [villageOptions, setVillageOptions] = useState([]);
+      const [provinceId, setProvinceId] = useState('');
+      const [regencyId, setRegencyId] = useState('');
+      const [districtId, setDistrictId] = useState('');
+      const [villageId, setVillageId] = useState('');
+      const [wilayahLoading, setWilayahLoading] = useState(false);
+      const [wilayahError, setWilayahError] = useState('');
+
+      const fetchWilayah = async (path) => {
+        const response = await fetch(`${WILAYAH_API}/${path}.json`);
+        if (!response.ok) throw new Error('Data wilayah Indonesia tidak dapat dimuat. Periksa koneksi internet.');
+        return response.json();
+      };
+      const toDisplayDate = (value) => {
+        if (!value) return '';
+        const raw = String(value).trim();
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+        const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return match ? `${match[3]}/${match[2]}/${match[1]}` : raw;
+      };
+      const toIsoDate = (value) => {
+        const match = String(value || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (!match) return '';
+        const [, dd, mm, yyyy] = match;
+        const date = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+        if (date.getFullYear() !== Number(yyyy) || date.getMonth() !== Number(mm) - 1 || date.getDate() !== Number(dd)) return '';
+        return `${yyyy}-${mm}-${dd}`;
+      };
+      const formatDateInput = (value) => {
+        const digits = String(value || '').replace(/\D/g, '').slice(0, 8);
+        if (digits.length <= 2) return digits;
+        if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+        return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+      };
+
+      useEffect(() => {
+        let active = true;
+        fetchWilayah('provinces').then(items => { if (active) setProvinceOptions(items); })
+          .catch(err => { if (active) setWilayahError(err.message || 'Gagal memuat data wilayah.'); });
+        return () => { active = false; };
+      }, []);
 
       // Urutkan A-Z berdasarkan nama lengkap
       const sortedKaryawanList = [...karyawanList].sort((a, b) => a.nama_lengkap.localeCompare(b.nama_lengkap));
@@ -4543,47 +4619,109 @@
         return jabatanList.filter(j => j.divisi === form.divisi);
       }, [form.divisi, jabatanList]);
 
-      const openModal = (k = null) => {
-        if(k) {
-          setEditingId(k.id); 
-          let alm = {}; 
-          try{ alm = JSON.parse(k.alamat); } catch(e){}
-          setForm({ 
-            nama_lengkap: k.nama_lengkap, 
-            tgl_lahir: k.tgl_lahir || '', 
-            username: k.username, 
-            password: k.password, 
-            no_wa: k.no_wa, 
-            email: k.email, 
-            divisi: k.divisi, 
-            jabatan: k.jabatan || '', 
-            provinsi: alm.provinsi || '', 
-            kota: alm.kota || '', 
-            jalan: alm.jalan || '',
+      const openModal = async (k = null) => {
+        setWilayahError('');
+        setWilayahLoading(true);
+        setRegencyOptions([]); setDistrictOptions([]); setVillageOptions([]);
+        setProvinceId(''); setRegencyId(''); setDistrictId(''); setVillageId('');
+        if (k) {
+          setEditingId(k.id);
+          let alm = {};
+          try { alm = typeof k.alamat === 'string' ? JSON.parse(k.alamat) : (k.alamat || {}); } catch (e) { alm = { jalan: k.alamat || '' }; }
+          setForm({
+            nama_lengkap: k.nama_lengkap || '', tgl_lahir: toDisplayDate(k.tgl_lahir), username: k.username || '',
+            password: k.password || '', no_wa: k.no_wa || '', email: k.email || '', divisi: k.divisi || '',
+            jabatan: k.jabatan || '', provinsi: alm.provinsi || '', kota: alm.kota || '',
+            kecamatan: alm.kecamatan || '', desa: alm.desa || alm.kelurahan || '', jalan: alm.jalan || '',
             foto_profil: k.foto_profil || ''
           });
+          setShowModal(true);
+          try {
+            const provinces = provinceOptions.length ? provinceOptions : await fetchWilayah('provinces');
+            setProvinceOptions(provinces);
+            const province = provinces.find(x => x.name.toLowerCase() === String(alm.provinsi || '').toLowerCase());
+            if (province) {
+              setProvinceId(province.id);
+              const regencies = await fetchWilayah(`regencies/${province.id}`); setRegencyOptions(regencies);
+              const regency = regencies.find(x => x.name.toLowerCase() === String(alm.kota || '').toLowerCase());
+              if (regency) {
+                setRegencyId(regency.id);
+                const districts = await fetchWilayah(`districts/${regency.id}`); setDistrictOptions(districts);
+                const district = districts.find(x => x.name.toLowerCase() === String(alm.kecamatan || '').toLowerCase());
+                if (district) {
+                  setDistrictId(district.id);
+                  const villages = await fetchWilayah(`villages/${district.id}`); setVillageOptions(villages);
+                  const villageName = alm.desa || alm.kelurahan || '';
+                  const village = villages.find(x => x.name.toLowerCase() === String(villageName).toLowerCase());
+                  if (village) setVillageId(village.id);
+                }
+              }
+            }
+          } catch (err) { setWilayahError(err.message || 'Gagal memuat data wilayah.'); }
         } else {
-          setEditingId(null); 
-          setForm({ 
-            nama_lengkap: '', 
-            tgl_lahir: '', 
-            username: '', 
-            password: '', 
-            no_wa: '', 
-            email: '', 
-            divisi: divisiList[0]?.nama_divisi || '', 
-            jabatan: '', 
-            provinsi: 'Jawa Barat', 
-            kota: 'Kota Bandung', 
-            jalan: '',
-            foto_profil: ''
-          });
+          setEditingId(null);
+          setForm({ nama_lengkap: '', tgl_lahir: '', username: '', password: '', no_wa: '', email: '', divisi: divisiList[0]?.nama_divisi || '', jabatan: '', provinsi: '', kota: '', kecamatan: '', desa: '', jalan: '', foto_profil: '' });
+          setShowModal(true);
+          if (!provinceOptions.length) {
+            try { setProvinceOptions(await fetchWilayah('provinces')); }
+            catch (err) { setWilayahError(err.message || 'Gagal memuat data wilayah.'); }
+          }
         }
-        setShowModal(true);
+        setWilayahLoading(false);
+      };
+
+      const handleProvinceChange = async (id) => {
+        const selected = provinceOptions.find(x => x.id === id);
+        setProvinceId(id); setRegencyId(''); setDistrictId(''); setVillageId('');
+        setRegencyOptions([]); setDistrictOptions([]); setVillageOptions([]);
+        setForm(prev => ({ ...prev, provinsi: selected?.name || '', kota: '', kecamatan: '', desa: '' }));
+        if (!id) return;
+        setWilayahLoading(true); setWilayahError('');
+        try { setRegencyOptions(await fetchWilayah(`regencies/${id}`)); }
+        catch (err) { setWilayahError(err.message || 'Gagal memuat kabupaten/kota.'); }
+        finally { setWilayahLoading(false); }
+      };
+      const handleRegencyChange = async (id) => {
+        const selected = regencyOptions.find(x => x.id === id);
+        setRegencyId(id); setDistrictId(''); setVillageId(''); setDistrictOptions([]); setVillageOptions([]);
+        setForm(prev => ({ ...prev, kota: selected?.name || '', kecamatan: '', desa: '' }));
+        if (!id) return;
+        setWilayahLoading(true); setWilayahError('');
+        try { setDistrictOptions(await fetchWilayah(`districts/${id}`)); }
+        catch (err) { setWilayahError(err.message || 'Gagal memuat kecamatan.'); }
+        finally { setWilayahLoading(false); }
+      };
+      const handleDistrictChange = async (id) => {
+        const selected = districtOptions.find(x => x.id === id);
+        setDistrictId(id); setVillageId(''); setVillageOptions([]);
+        setForm(prev => ({ ...prev, kecamatan: selected?.name || '', desa: '' }));
+        if (!id) return;
+        setWilayahLoading(true); setWilayahError('');
+        try { setVillageOptions(await fetchWilayah(`villages/${id}`)); }
+        catch (err) { setWilayahError(err.message || 'Gagal memuat desa/kelurahan.'); }
+        finally { setWilayahLoading(false); }
+      };
+      const handleVillageChange = (id) => {
+        const selected = villageOptions.find(x => x.id === id);
+        setVillageId(id); setForm(prev => ({ ...prev, desa: selected?.name || '' }));
       };
 
       const handleSave = async (e) => {
         e.preventDefault();
+        const noWa = String(form.no_wa || '').trim();
+        if (!/^08\d{8,13}$/.test(noWa)) {
+          showToast('Nomor WhatsApp wajib diawali 08 dan berisi minimal 10 digit (maksimal 15 digit).', 'error');
+          return;
+        }
+        const tglLahirIso = toIsoDate(form.tgl_lahir);
+        if (!tglLahirIso) {
+          showToast('Tanggal lahir harus valid dengan format dd/mm/yyyy, contoh 31/12/1998.', 'error');
+          return;
+        }
+        if (!form.provinsi || !form.kota || !form.kecamatan || !form.desa) {
+          showToast('Pilih provinsi, kabupaten/kota, kecamatan, dan desa/kelurahan.', 'error');
+          return;
+        }
         try {
           let fotoProfilUrl = form.foto_profil || '';
           if (fotoProfilUrl.startsWith('data:image')) {
@@ -4596,8 +4734,8 @@
               throw new Error('Foto profil gagal diunggah ke Google Drive. Periksa konfigurasi Google Apps Script.');
             }
           }
-          const alamat = JSON.stringify({ provinsi: form.provinsi, kota: form.kota, jalan: form.jalan });
-          const cleanForm = { ...form, foto_profil: fotoProfilUrl };
+          const alamat = JSON.stringify({ provinsi: form.provinsi, kota: form.kota, kecamatan: form.kecamatan, desa: form.desa, jalan: form.jalan });
+          const cleanForm = { ...form, tgl_lahir: tglLahirIso, no_wa: noWa, foto_profil: fotoProfilUrl };
           if(editingId) {
             setKaryawanList(karyawanList.map(k => k.id === editingId ? { ...k, ...cleanForm, alamat } : k));
           } else {
@@ -4733,11 +4871,11 @@
                      <div className="grid grid-cols-2 gap-2">
                        <div>
                          <label className="text-[10px] font-bold text-slate-400 ml-1 block mb-1">Tanggal Lahir</label>
-                         <input type="date" value={form.tgl_lahir} onChange={e=>setForm({...form, tgl_lahir:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" required />
+                         <input type="text" inputMode="numeric" placeholder="dd/mm/yyyy" maxLength={10} value={form.tgl_lahir} onChange={e=>setForm({...form, tgl_lahir:formatDateInput(e.target.value)})} pattern="\d{2}/\d{2}/\d{4}" title="Gunakan format dd/mm/yyyy, contoh 31/12/1998" className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" required />
                        </div>
                        <div>
                          <label className="text-[10px] font-bold text-slate-400 ml-1 block mb-1">No. WhatsApp</label>
-                         <input type="tel" placeholder="0812345..." value={form.no_wa} onChange={e=>setForm({...form, no_wa:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" required />
+                         <input type="tel" inputMode="numeric" placeholder="08xxxxxxxxxx" value={form.no_wa} onChange={e=>setForm({...form, no_wa:e.target.value.replace(/\D/g, "").slice(0, 15)})} pattern="08[0-9]{8,13}" minLength={10} maxLength={15} title="Nomor WhatsApp wajib diawali 08 dan minimal 10 digit" className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" required />
                        </div>
                      </div>
 
@@ -4782,12 +4920,26 @@
                      </div>
 
                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
-                       <label className="text-[10px] font-bold text-slate-400 block">Alamat (Provinsi & Kota)</label>
-                       <div className="grid grid-cols-2 gap-2">
-                         <input type="text" placeholder="Provinsi" value={form.provinsi} onChange={e=>setForm({...form, provinsi:e.target.value})} className="w-full bg-white border border-slate-200 text-xs rounded-xl p-2 font-bold outline-none" required />
-                         <input type="text" placeholder="Kota/Kabupaten" value={form.kota} onChange={e=>setForm({...form, kota:e.target.value})} className="w-full bg-white border border-slate-200 text-xs rounded-xl p-2 font-bold outline-none" required />
-                       </div>
-                       <input type="text" placeholder="Detail Jalan" value={form.jalan} onChange={e=>setForm({...form, jalan:e.target.value})} className="w-full bg-white border border-slate-200 text-xs rounded-xl p-2 font-bold outline-none" required />
+                       <label className="text-[10px] font-bold text-slate-400 block">Alamat Indonesia</label>
+                       {wilayahError && <p className="text-[10px] text-rose-600 font-semibold">{wilayahError}</p>}
+                       {wilayahLoading && <p className="text-[10px] text-violet-600 font-semibold"><i className="fa-solid fa-spinner fa-spin mr-1"></i> Memuat data wilayah...</p>}
+                       <select value={provinceId} onChange={e=>handleProvinceChange(e.target.value)} className="w-full bg-white border border-slate-200 text-xs rounded-xl p-2 font-bold outline-none" required>
+                         <option value="">Pilih Provinsi...</option>
+                         {provinceOptions.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                       </select>
+                       <select value={regencyId} onChange={e=>handleRegencyChange(e.target.value)} disabled={!provinceId || !regencyOptions.length} className="w-full bg-white border border-slate-200 text-xs rounded-xl p-2 font-bold outline-none disabled:opacity-50" required>
+                         <option value="">Pilih Kabupaten/Kota...</option>
+                         {regencyOptions.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                       </select>
+                       <select value={districtId} onChange={e=>handleDistrictChange(e.target.value)} disabled={!regencyId || !districtOptions.length} className="w-full bg-white border border-slate-200 text-xs rounded-xl p-2 font-bold outline-none disabled:opacity-50" required>
+                         <option value="">Pilih Kecamatan...</option>
+                         {districtOptions.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                       </select>
+                       <select value={villageId} onChange={e=>handleVillageChange(e.target.value)} disabled={!districtId || !villageOptions.length} className="w-full bg-white border border-slate-200 text-xs rounded-xl p-2 font-bold outline-none disabled:opacity-50" required>
+                         <option value="">Pilih Desa/Kelurahan...</option>
+                         {villageOptions.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                       </select>
+                       <input type="text" placeholder="Detail jalan, nomor rumah, RT/RW (opsional)" value={form.jalan} onChange={e=>setForm({...form, jalan:e.target.value})} className="w-full bg-white border border-slate-200 text-xs rounded-xl p-2 font-bold outline-none" />
                      </div>
                    </div>
 
