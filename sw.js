@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'app-surtok-v1';
+const CACHE_NAME = 'app-surtok-v2';
 
 const APP_FILES = [
   './',
@@ -8,18 +8,22 @@ const APP_FILES = [
   './Logo%20Surtok.png'
 ];
 
+// Instalasi service worker
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(async (cache) => {
         for (const file of APP_FILES) {
           try {
-            const response = await fetch(file, { cache: 'no-store' });
+            const response = await fetch(file, {
+              cache: 'no-store'
+            });
+
             if (response.ok) {
               await cache.put(file, response);
             }
           } catch (error) {
-            console.warn('Gagal menyimpan cache:', file, error);
+            console.warn('File tidak berhasil di-cache:', file);
           }
         }
       })
@@ -27,6 +31,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
+// Aktifkan versi baru dan bersihkan cache lama milik App Surtok
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
@@ -45,6 +50,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Ambil data dari jaringan, gunakan cache jika offline
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
@@ -52,8 +58,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Jangan mengintervensi permintaan ke domain lain,
-  // termasuk layanan Supabase.
+  // Jangan mengubah permintaan ke domain lain, termasuk Supabase
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
@@ -64,9 +69,9 @@ self.addEventListener('fetch', (event) => {
 
           caches.open(CACHE_NAME)
             .then((cache) => cache.put(request, copy))
-            .catch((error) =>
-              console.warn('Gagal memperbarui cache:', error)
-            );
+            .catch((error) => {
+              console.warn('Pembaruan cache gagal:', error);
+            });
         }
 
         return response;
@@ -78,11 +83,12 @@ self.addEventListener('fetch', (event) => {
 
         if (request.mode === 'navigate') {
           const appPage = await caches.match('./index.html');
+
           if (appPage) return appPage;
         }
 
         return new Response(
-          'Halaman tidak tersedia. Periksa koneksi internet Anda.',
+          'Koneksi internet tidak tersedia dan halaman belum tersimpan.',
           {
             status: 503,
             headers: {
