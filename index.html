@@ -417,7 +417,32 @@
           });
 
           if (changedRows.length) {
-            const { error } = await client.from(table).upsert(changedRows, { onConflict: 'id' });
+            // Properti alamat hanya untuk kebutuhan formulir; skema Supabase
+            // menyimpan detail alamat dalam satu kolom `alamat` (JSON string),
+            // bukan kolom terpisah `provinsi`, `kota`, atau `jalan`.
+            const rowsForDatabase = table === 'master_karyawan'
+              ? changedRows.map(row => {
+                  const { provinsi, kota, jalan, ...dbRow } = row;
+                  // Bila ada detail alamat dari formulir, pastikan semuanya
+                  // tetap tersimpan pada kolom alamat yang didukung skema.
+                  if (provinsi !== undefined || kota !== undefined || jalan !== undefined) {
+                    let alamat = {};
+                    try {
+                      alamat = typeof dbRow.alamat === 'string'
+                        ? JSON.parse(dbRow.alamat || '{}')
+                        : (dbRow.alamat || {});
+                    } catch (_) { alamat = {}; }
+                    dbRow.alamat = JSON.stringify({
+                      ...alamat,
+                      ...(provinsi !== undefined ? { provinsi } : {}),
+                      ...(kota !== undefined ? { kota } : {}),
+                      ...(jalan !== undefined ? { jalan } : {})
+                    });
+                  }
+                  return dbRow;
+                })
+              : changedRows;
+            const { error } = await client.from(table).upsert(rowsForDatabase, { onConflict: 'id' });
             if (error) throw error;
           }
           for (const id of removedIds) {
