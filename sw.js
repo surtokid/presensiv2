@@ -1,73 +1,95 @@
 
-const CACHE_NAME = "suryatokoku-pwa-v2";
+const CACHE_NAME = 'app-surtok-v1';
 
-self.addEventListener("install", (event) => {
-  self.skipWaiting();
-});
+const APP_FILES = [
+  './',
+  './index.html',
+  './manifest.json',
+  './Logo%20Surtok.png'
+];
 
-self.addEventListener("activate", (event) => {
+self.addEventListener('install', (event) => {
   event.waitUntil(
-    (async () => {
-      const keys = await caches.keys();
-
-      await Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      );
-
-      await self.clients.claim();
-    })()
+    caches.open(CACHE_NAME)
+      .then(async (cache) => {
+        for (const file of APP_FILES) {
+          try {
+            const response = await fetch(file, { cache: 'no-store' });
+            if (response.ok) {
+              await cache.put(file, response);
+            }
+          } catch (error) {
+            console.warn('Gagal menyimpan cache:', file, error);
+          }
+        }
+      })
+      .then(() => self.skipWaiting())
   );
 });
 
-self.addEventListener("fetch", (event) => {
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter(
+              (key) =>
+                key.startsWith('app-surtok-') &&
+                key !== CACHE_NAME
+            )
+            .map((key) => caches.delete(key))
+        )
+      )
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (event) => {
   const request = event.request;
+
+  if (request.method !== 'GET') return;
+
   const url = new URL(request.url);
 
-  if (
-    request.method !== "GET" ||
-    url.origin !== self.location.origin
-  ) {
-    return;
-  }
-
-  if (request.mode === "navigate") {
-    event.respondWith(
-      (async () => {
-        try {
-          const response = await fetch(request);
-
-          if (response.ok) {
-            const cache = await caches.open(CACHE_NAME);
-            await cache.put(request, response.clone());
-          }
-
-          return response;
-        } catch {
-          return (
-            await caches.match(request)
-          ) || Response.error();
-        }
-      })()
-    );
-
-    return;
-  }
+  // Jangan mengintervensi permintaan ke domain lain,
+  // termasuk layanan Supabase.
+  if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    (async () => {
-      const cached = await caches.match(request);
-      if (cached) return cached;
+    fetch(request)
+      .then((response) => {
+        if (response && response.ok) {
+          const copy = response.clone();
 
-      const response = await fetch(request);
+          caches.open(CACHE_NAME)
+            .then((cache) => cache.put(request, copy))
+            .catch((error) =>
+              console.warn('Gagal memperbarui cache:', error)
+            );
+        }
 
-      if (response.ok) {
-        const cache = await caches.open(CACHE_NAME);
-        await cache.put(request, response.clone());
-      }
+        return response;
+      })
+      .catch(async () => {
+        const cached = await caches.match(request);
 
-      return response;
-    })()
+        if (cached) return cached;
+
+        if (request.mode === 'navigate') {
+          const appPage = await caches.match('./index.html');
+          if (appPage) return appPage;
+        }
+
+        return new Response(
+          'Halaman tidak tersedia. Periksa koneksi internet Anda.',
+          {
+            status: 503,
+            headers: {
+              'Content-Type': 'text/plain; charset=utf-8'
+            }
+          }
+        );
+      })
   );
 });
