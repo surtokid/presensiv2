@@ -1913,17 +1913,19 @@
           created_at: now.toISOString()
         };
 
-        // Simpan ke Supabase jika terhubung
-        if (supabase) {
-          try {
-            await supabase.from('presensi').insert([newRecord]);
-          } catch (err) {
-            console.warn("Gagal simpan presensi ke Supabase:", err);
-          }
+        // Simpan ke Supabase dan periksa `error` yang dikembalikan SDK.
+        // Supabase biasanya tidak melempar exception otomatis untuk error SQL/RLS.
+        try {
+          const client = await getSupabaseClient();
+          const { error } = await client.from('presensi').insert([newRecord]);
+          if (error) throw error;
+          setIsUploading(false);
+          onSuccess(newRecord);
+        } catch (err) {
+          console.error("Gagal simpan presensi ke Supabase:", err);
+          setIsUploading(false);
+          alert(`Presensi belum tersimpan ke database: ${err.message || 'Kesalahan Supabase'}. Silakan coba lagi atau hubungi admin.`);
         }
-
-        setIsUploading(false);
-        onSuccess(newRecord);
       };
 
       return (
@@ -2744,6 +2746,37 @@
     }
 
     function ProfilKaryawanView({ currentUser, setCurrentUser, showToast, handleLogout }) {
+      const [uploadingProfilePhoto, setUploadingProfilePhoto] = useState(false);
+      const handleProfilePhotoChange = async (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) { showToast('Pilih file gambar yang valid', 'error'); return; }
+        if (file.size > 8 * 1024 * 1024) { showToast('Ukuran foto maksimal 8 MB', 'error'); return; }
+        setUploadingProfilePhoto(true);
+        try {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('Gagal membaca file foto'));
+            reader.readAsDataURL(file);
+          });
+          const uploadedUrl = await uploadToGoogleDriveViaGAS(dataUrl, `profil_${currentUser.id}_${Date.now()}.jpg`, 'profil');
+          if (!uploadedUrl || uploadedUrl.startsWith('data:image')) {
+            throw new Error('Foto belum berhasil diunggah ke Google Drive. Periksa deployment Google Apps Script dan izin aksesnya.');
+          }
+          const client = await getSupabaseClient();
+          const { error } = await client.from('master_karyawan').update({ foto_profil: uploadedUrl }).eq('id', currentUser.id);
+          if (error) throw error;
+          setCurrentUser({ ...currentUser, foto_profil: uploadedUrl });
+          showToast('Foto profil berhasil disimpan ke Google Drive');
+        } catch (err) {
+          console.error('Gagal menyimpan foto profil:', err);
+          showToast(`Gagal menyimpan foto profil: ${err.message || 'kesalahan tidak diketahui'}`, 'error');
+        } finally {
+          setUploadingProfilePhoto(false);
+          event.target.value = '';
+        }
+      };
       return (
         <div className="p-5 space-y-4 pb-28">
           <div className="bg-white/90 backdrop-blur-xl p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] text-center">
@@ -2752,8 +2785,8 @@
                 {currentUser.foto_profil ? <img src={getCleanImageUrl(currentUser.foto_profil)} className="w-full h-full object-cover" /> : <span className="font-bold text-2xl text-slate-300">{currentUser.nama_lengkap[0]}</span>}
               </div>
               <label className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center cursor-pointer shadow-md">
-                <i className="fa-solid fa-camera text-xs"></i>
-                <input type="file" accept="image/*" onChange={(e) => { const r = new FileReader(); r.onloadend = () => { setCurrentUser({...currentUser, foto_profil: r.result}); showToast('Foto diperbarui'); }; if(e.target.files[0]) r.readAsDataURL(e.target.files[0]); }} className="hidden" />
+                <i className={`fa-solid ${uploadingProfilePhoto ? 'fa-spinner fa-spin' : 'fa-camera'} text-xs`}></i>
+                <input type="file" accept="image/*" onChange={handleProfilePhotoChange} disabled={uploadingProfilePhoto} className="hidden" />
               </label>
             </div>
             <h3 className="font-display font-bold text-lg text-slate-800">{currentUser.nama_lengkap}</h3>
@@ -4541,23 +4574,40 @@
         setShowModal(true);
       };
 
-      const handleSave = (e) => {
+      const handleSave = async (e) => {
         e.preventDefault();
-        const alamat = JSON.stringify({ provinsi: form.provinsi, kota: form.kota, jalan: form.jalan });
-        if(editingId) {
-          setKaryawanList(karyawanList.map(k => k.id === editingId ? { ...k, ...form, alamat } : k));
-        } else {
-          setKaryawanList([...karyawanList, { 
-            id: 'kry-' + Date.now(), 
-            ...form, 
-            alamat, 
-            shifts: ['Pagi (08:00 - 17:00)'], 
-            sisa_libur: 4, 
-            sisa_cuti: 0 
-          }]);
+        try {
+          let fotoProfilUrl = form.foto_profil || '';
+          if (fotoProfilUrl.startsWith('data:image')) {
+            fotoProfilUrl = await uploadToGoogleDriveViaGAS(
+              fotoProfilUrl,
+              `profil_${editingId || ('kry-' + Date.now())}_${Date.now()}.jpg`,
+              'profil'
+            );
+            if (!fotoProfilUrl || fotoProfilUrl.startsWith('data:image')) {
+              throw new Error('Foto profil gagal diunggah ke Google Drive. Periksa konfigurasi Google Apps Script.');
+            }
+          }
+          const alamat = JSON.stringify({ provinsi: form.provinsi, kota: form.kota, jalan: form.jalan });
+          const cleanForm = { ...form, foto_profil: fotoProfilUrl };
+          if(editingId) {
+            setKaryawanList(karyawanList.map(k => k.id === editingId ? { ...k, ...cleanForm, alamat } : k));
+          } else {
+            setKaryawanList([...karyawanList, {
+              id: 'kry-' + Date.now(),
+              ...cleanForm,
+              alamat,
+              shifts: ['Pagi (08:00 - 17:00)'],
+              sisa_libur: 4,
+              sisa_cuti: 0
+            }]);
+          }
+          setShowModal(false);
+          showToast(editingId ? 'Data karyawan diperbarui!' : 'Karyawan baru ditambahkan!');
+        } catch (err) {
+          console.error('Gagal menyimpan karyawan/foto:', err);
+          showToast(`Gagal menyimpan karyawan: ${err.message || 'kesalahan tidak diketahui'}`, 'error');
         }
-        setShowModal(false); 
-        showToast(editingId ? 'Data karyawan diperbarui!' : 'Karyawan baru ditambahkan!');
       };
 
       return (
