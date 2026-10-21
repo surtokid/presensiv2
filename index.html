@@ -103,34 +103,64 @@
     const { useState, useEffect, useRef, useMemo } = React;
 
     // Supabase & Google Drive via Google Apps Script (GAS) Configuration
-    const SUPABASE_URL = "https://zzpzvjmftcmlcjnjjhop.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6cHp2am1mdGNtbGNqbmpqaG9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0Mzk1ODcsImV4cCI6MjEwODAxNTU4N30.6hvHxWgZCbWgZM9qLdAnrTAE-ZyOqTEiuxrdTaXtpi0";
+    const SUPABASE_URL = "https://hxpoajftzysfsxgjcgex.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4cG9hamZ0enlzZnN4Z2pjZ2V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MDA1OTUsImV4cCI6MjEwNzk3NjU5NX0.2_LNfRj9B54uINQNMO4zecN3no8B6mYl07fNJ0mYHqM";
     const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz2XNXvOnw-bL9SVKhcgJvKuYiRYJtLMqoNLeGSesIUss_s2rv6c83TO-ZB0QsP5J70OA/exec";
     const GOOGLE_DRIVE_FOLDER_ID = "10QkIZG7iJbdcHwRTyKZt1EKlqADJ8V36";
 
-    
-let supabase = null;
+    // Supabase client dibuat secara lazy agar tidak bergantung pada urutan CDN.
+    let supabase = null;
+    let supabaseClientPromise = null;
 
-try {
-  if (
-    window.supabase &&
-    typeof window.supabase.createClient === "function"
-  ) {
-    supabase = window.supabase.createClient(
-      SUPABASE_URL,
-      SUPABASE_ANON_KEY
-    );
+    function loadSupabaseFallback() {
+      return new Promise((resolve) => {
+        const existing = document.querySelector('script[data-supabase-fallback="true"]');
+        if (window.supabase?.createClient) return resolve(true);
+        const script = existing || document.createElement('script');
+        let settled = false;
+        const finish = (ok) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(ok && !!window.supabase?.createClient);
+        };
+        const timer = setTimeout(() => finish(false), 4000);
+        script.src = 'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js';
+        script.async = true;
+        script.dataset.supabaseFallback = 'true';
+        script.onload = () => finish(!!window.supabase?.createClient);
+        script.onerror = () => finish(false);
+        if (!existing) document.head.appendChild(script);
+      });
+    }
 
-    console.info("Supabase client berhasil diinisialisasi.");
-  } else {
-    console.error(
-      "Supabase SDK belum termuat. Periksa script CDN di bagian head."
-    );
-  }
-} catch (error) {
-  console.error("Inisialisasi Supabase gagal:", error);
-}
+    async function getSupabaseClient() {
+      if (supabase) return supabase;
+      if (supabaseClientPromise) return supabaseClientPromise;
 
+      supabaseClientPromise = (async () => {
+        // Polling maksimal sekitar 3,5 detik untuk CDN utama.
+        for (let i = 0; i < 14; i++) {
+          if (window.supabase?.createClient) break;
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+        if (!window.supabase?.createClient) {
+          await loadSupabaseFallback();
+        }
+        if (!window.supabase?.createClient) {
+          throw new Error('Library Supabase tidak berhasil dimuat. Periksa koneksi/CDN.');
+        }
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        return supabase;
+      })();
+
+      try {
+        return await supabaseClientPromise;
+      } catch (error) {
+        supabaseClientPromise = null;
+        throw error;
+      }
+    }
 
     // Fungsi Pengunggah Media ke Google Drive melalui Google Apps Script Web App
     const uploadToGoogleDriveViaGAS = async (base64Image, fileName = '', subFolder = 'presensi') => {
@@ -260,6 +290,7 @@ try {
       const [shiftList, setShiftList] = useState([]);
       const [pengumumanList, setPengumumanList] = useState([]);
       const [adminList, setAdminList] = useState([]);
+      const [isAdminTableEmpty, setIsAdminTableEmpty] = useState(false);
       const [toleransiMenit, setToleransiMenit] = useState(15);
         
       const [presensiList, setPresensiList] = useState([]);
@@ -269,66 +300,77 @@ try {
       const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
       const [isLoadingData, setIsLoadingData] = useState(false);
 
-      // Sinkronisasi data langsung dari Supabase
+      // Sinkronisasi seluruh data Supabase secara paralel.
       useEffect(() => {
-        if (!supabase) return;
+        let isMounted = true;
 
         const fetchAllFromSupabase = async () => {
           setIsLoadingData(true);
           try {
-            // 1. Master Karyawan
-            const { data: kryData, error: kryErr } = await supabase.from('master_karyawan').select('*');
-            if (!kryErr && kryData) setKaryawanList(kryData);
+            const client = await getSupabaseClient();
+            const results = await Promise.all([
+              client.from('master_karyawan').select('*'),
+              client.from('master_lokasi').select('*'),
+              client.from('master_divisi').select('*'),
+              client.from('master_jabatan').select('*'),
+              client.from('master_shift').select('*'),
+              client.from('master_admin').select('*'),
+              client.from('pengumuman').select('*').order('created_at', { ascending: false }),
+              client.from('presensi').select('*').order('created_at', { ascending: false }),
+              client.from('pengajuan_lembur').select('*').order('created_at', { ascending: false }),
+              client.from('klaim_kehadiran').select('*'),
+              client.from('settings').select('value').eq('key', 'toleransi_menit').maybeSingle()
+            ]);
 
-            // 2. Master Lokasi
-            const { data: lokData, error: lokErr } = await supabase.from('master_lokasi').select('*');
-            if (!lokErr && lokData) setLokasiList(lokData);
+            if (!isMounted) return;
+            const [
+              kryRes, lokRes, divRes, jabRes, shRes, admRes,
+              pgmRes, prsRes, lmbRes, klmRes, toleransiRes
+            ] = results;
 
-            // 3. Master Divisi
-            const { data: divData, error: divErr } = await supabase.from('master_divisi').select('*');
-            if (!divErr && divData) setDivisiList(divData);
+            const assignIfOk = (result, setter, label) => {
+              if (result.error) {
+                console.warn(`Gagal memuat ${label}:`, result.error.message);
+                return;
+              }
+              setter(result.data || []);
+            };
 
-            // 4. Master Jabatan
-            const { data: jabData, error: jabErr } = await supabase.from('master_jabatan').select('*');
-            if (!jabErr && jabData) setJabatanList(jabData);
+            assignIfOk(kryRes, setKaryawanList, 'master_karyawan');
+            assignIfOk(lokRes, setLokasiList, 'master_lokasi');
+            assignIfOk(divRes, setDivisiList, 'master_divisi');
+            assignIfOk(jabRes, setJabatanList, 'master_jabatan');
+            assignIfOk(shRes, setShiftList, 'master_shift');
 
-            // 5. Master Shift
-            const { data: shData, error: shErr } = await supabase.from('master_shift').select('*');
-            if (!shErr && shData) setShiftList(shData);
+            if (!admRes.error) {
+              const admins = admRes.data || [];
+              setAdminList(admins);
+              setIsAdminTableEmpty(admins.length === 0);
+            } else {
+              console.warn('Gagal memuat master_admin:', admRes.error.message);
+              setIsAdminTableEmpty(false);
+            }
 
-            // 6. Master Admin
-            const { data: admData, error: admErr } = await supabase.from('master_admin').select('*');
-            if (!admErr && admData) setAdminList(admData);
+            assignIfOk(pgmRes, setPengumumanList, 'pengumuman');
+            assignIfOk(prsRes, setPresensiList, 'presensi');
+            assignIfOk(lmbRes, setLemburList, 'pengajuan_lembur');
+            assignIfOk(klmRes, setKlaimList, 'klaim_kehadiran');
 
-            // 7. Pengumuman
-            const { data: pgmData, error: pgmErr } = await supabase.from('pengumuman').select('*').order('created_at', { ascending: false });
-            if (!pgmErr && pgmData) setPengumumanList(pgmData);
-
-            // 8. Presensi Transaksi
-            const { data: prsData, error: prsErr } = await supabase.from('presensi').select('*').order('created_at', { ascending: false });
-            if (!prsErr && prsData) setPresensiList(prsData);
-
-            // 9. Pengajuan Lembur
-            const { data: lmbData, error: lmbErr } = await supabase.from('pengajuan_lembur').select('*').order('created_at', { ascending: false });
-            if (!lmbErr && lmbData) setLemburList(lmbData);
-
-            // 10. Klaim Kehadiran
-            const { data: klmData, error: klmErr } = await supabase.from('klaim_kehadiran').select('*');
-            if (!klmErr && klmData) setKlaimList(klmData);
-
-            // 11. Pengaturan Toleransi
-            const { data: setToleransi } = await supabase.from('settings').select('value').eq('key', 'toleransi_menit').single();
-            if (setToleransi && setToleransi.value) {
-              setToleransiMenit(Number(setToleransi.value));
+            if (toleransiRes.error) {
+              console.warn('Gagal memuat settings toleransi:', toleransiRes.error.message);
+            } else if (toleransiRes.data?.value != null && toleransiRes.data.value !== '') {
+              const value = Number(toleransiRes.data.value);
+              if (Number.isFinite(value)) setToleransiMenit(value);
             }
           } catch (err) {
-            console.warn("Gagal memuat data dari Supabase:", err);
+            console.error('Gagal menginisialisasi/memuat Supabase:', err);
           } finally {
-            setIsLoadingData(false);
+            if (isMounted) setIsLoadingData(false);
           }
         };
 
         fetchAllFromSupabase();
+        return () => { isMounted = false; };
       }, []);
 
     const showToast = (message, type = 'success') => {
@@ -355,9 +397,9 @@ try {
     const handleLoginKaryawan = (identifier, password) => {
       const trimmedId = identifier.trim().toLowerCase();
       const user = karyawanList.find(k => 
-        (k.username.toLowerCase() === trimmedId || 
+        ((k.username || '').toLowerCase() === trimmedId || 
          k.no_wa === trimmedId || 
-         k.email.toLowerCase() === trimmedId) && 
+         (k.email || '').toLowerCase() === trimmedId) && 
         k.password === password
       );
 
@@ -379,12 +421,21 @@ try {
 
     const handleLoginAdmin = (identifier, password) => {
       const trimmedId = identifier.trim().toLowerCase();
-      const admin = adminList.find(a => 
-        (a.username.toLowerCase() === trimmedId || a.email.toLowerCase() === trimmedId) && 
+      const admin = adminList.find(a =>
+        ((a.username || '').toLowerCase() === trimmedId ||
+         (a.email || '').toLowerCase() === trimmedId) &&
         a.password === password
       );
 
-      if (admin) {
+      // Login root sementara hanya aktif jika query master_admin berhasil
+      // dan tabel benar-benar kosong. Tidak aktif saat koneksi/query gagal.
+      const emergencyAdmin = isAdminTableEmpty && trimmedId === 'admin' && password === '123'
+        ? { id: 'temporary-root-admin', username: 'admin', email: '', nama_lengkap: 'Administrator (Akses Awal)', password: '123' }
+        : null;
+      const authenticatedAdmin = admin || emergencyAdmin;
+
+      if (authenticatedAdmin) {
+        const admin = authenticatedAdmin;
         setIsAdmin(true);
         setCurrentUser(admin);
         setAuthSession({ type: 'admin', id: admin.id });
