@@ -342,6 +342,20 @@
       return url;
     }
 
+    // URL foto profil diberi versi agar browser tidak memakai gambar lama dari cache.
+    function getProfileImageUrl(url, version) {
+      const cleanUrl = getCleanImageUrl(url);
+      if (!cleanUrl) return '';
+      const versionKey = version || 'latest';
+      try {
+        const parsed = new URL(cleanUrl, window.location.href);
+        parsed.searchParams.set('profile_v', String(versionKey));
+        return parsed.toString();
+      } catch (_) {
+        return cleanUrl + (cleanUrl.includes('?') ? '&' : '?') + 'profile_v=' + encodeURIComponent(String(versionKey));
+      }
+    }
+
     // Format Indonesian Date
     function formatIndoDate(dateString) {
       const date = new Date(dateString);
@@ -1277,7 +1291,7 @@
               <div className="flex items-center space-x-3.5 min-w-0 flex-1">
                 <div className="w-14 h-14 rounded-full bg-white p-1 border border-rose-200 shadow-sm flex items-center justify-center overflow-hidden">
                   {currentUser.foto_profil ? (
-                    <img src={getCleanImageUrl(currentUser.foto_profil)} alt={currentUser.nama_lengkap} className="w-full h-full rounded-full object-cover" />
+                    <img key={`${currentUser.foto_profil}_${currentUser.foto_profil_updated_at || 'initial'}`} src={getProfileImageUrl(currentUser.foto_profil, currentUser.foto_profil_updated_at || 'initial')} alt={currentUser.nama_lengkap} className="w-full h-full rounded-full object-cover" />
                   ) : (
                     <span className="font-display font-bold text-xl text-rose-500">
                       {currentUser.nama_lengkap.split(' ').map(n=>n[0]).slice(0, 2).join('')}
@@ -3030,8 +3044,13 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
           const client = await getSupabaseClient();
           const { error } = await client.from('master_karyawan').update({ foto_profil: uploadedUrl }).eq('id', currentUser.id);
           if (error) throw error;
-          setCurrentUser({ ...currentUser, foto_profil: uploadedUrl });
-          showToast('Foto profil berhasil disimpan ke Google Drive');
+          const updatedAt = Date.now();
+          const updatedUser = { ...currentUser, foto_profil: uploadedUrl, foto_profil_updated_at: updatedAt };
+          setCurrentUser(updatedUser);
+          try { localStorage.setItem('suryatokoku_user', JSON.stringify(updatedUser)); } catch (storageError) {
+            console.warn('Tidak dapat memperbarui cache sesi lokal:', storageError);
+          }
+          showToast('Foto profil berhasil diperbarui');
         } catch (err) {
           console.error('Gagal menyimpan foto profil:', err);
           showToast(`Gagal menyimpan foto profil: ${err.message || 'kesalahan tidak diketahui'}`, 'error');
@@ -3045,7 +3064,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
           <div className="bg-white/90 backdrop-blur-xl p-6 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] text-center">
             <div className="relative w-24 h-24 mx-auto mb-4">
               <div className="w-full h-full rounded-full bg-slate-50 border border-slate-100 overflow-hidden flex items-center justify-center">
-                {currentUser.foto_profil ? <img src={getCleanImageUrl(currentUser.foto_profil)} className="w-full h-full object-cover" /> : <span className="font-bold text-2xl text-slate-300">{currentUser.nama_lengkap[0]}</span>}
+                {currentUser.foto_profil ? <img key={`${currentUser.foto_profil}_${currentUser.foto_profil_updated_at || 'initial'}`} src={getProfileImageUrl(currentUser.foto_profil, currentUser.foto_profil_updated_at || 'initial')} onError={(e) => { if (e.currentTarget.dataset.retry !== '1') { e.currentTarget.dataset.retry = '1'; e.currentTarget.src = getProfileImageUrl(currentUser.foto_profil, Date.now()); } }} className="w-full h-full object-cover" /> : <span className="font-bold text-2xl text-slate-300">{currentUser.nama_lengkap[0]}</span>}
               </div>
               <label className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center cursor-pointer shadow-md">
                 <i className={`fa-solid ${uploadingProfilePhoto ? 'fa-spinner fa-spin' : 'fa-camera'} text-xs`}></i>
