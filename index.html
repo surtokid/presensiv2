@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>App Surtok</title>
-  <link rel="icon" type="image/png" href="./Logo%20Surtok.png">
-  <link rel="apple-touch-icon" href="./Logo%20Surtok.png">
+  <title>App SuryaKuCan</title>
+  <link rel="icon" type="image/png" href="./Logo%20SuryaKuCan.png">
+  <link rel="apple-touch-icon" href="./Logo%20SuryaKuCan.png">
   <link rel="manifest" href="./manifest.json?v=app-surtok-v2">
   <meta name="theme-color" content="#ec4899">
-  <meta name="application-name" content="App Surtok">
+  <meta name="application-name" content="App SuryaKuCan">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="App Surtok">
+  <meta name="apple-mobile-web-app-title" content="App SuryaKuCan">
   
   <!-- Google Fonts: Plus Jakarta Sans & Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -697,13 +697,13 @@
     return (
       <div className="min-h-screen flex flex-col justify-between">
         {/* Top Navigation Bar: Ditampilkan kembali */}
-        <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
+        <header className="hidden bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
           {/* Brand Logo */}
           <div 
             onClick={() => navigateTo(isDashboardRoute ? '#dashboard' : '#karyawan')}
             className="flex items-center space-x-2 cursor-pointer select-none"
           >
-            <img src="Logo Surtok.png" alt="Logo Suryatokoku" className="w-7 h-7 object-contain rounded-lg drop-shadow-xs" />
+            <img src="Logo SuryaKuCan.png" alt="Logo SuryaKuCan" className="w-7 h-7 object-contain rounded-lg drop-shadow-xs" />
             <div className="flex flex-col">
               <span className="font-extrabold tracking-tight font-display bg-clip-text text-transparent bg-gradient-to-r from-violet-600 to-fuchsia-600 text-xs sm:text-sm">
                 SURYATOKOKU HR
@@ -938,7 +938,7 @@
           {/* Logo & Header Title */}
           <div className="text-center mb-6">
             <div className="w-16 h-16 mx-auto mb-3.5 flex items-center justify-center bg-white rounded-2xl p-2 shadow-md border border-slate-100">
-              <img src="Logo Surtok.png" alt="Logo Suryatokoku" className="w-full h-full object-contain" />
+              <img src="Logo SuryaKuCan.png" alt="Logo SuryaKuCan" className="w-full h-full object-contain" />
             </div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold mb-2 border uppercase tracking-wider bg-slate-50 text-slate-600 border-slate-200">
               <span className={`w-2 h-2 rounded-full ${loginRole === 'admin' ? 'bg-indigo-600' : 'bg-violet-600'}`}></span>
@@ -1868,14 +1868,21 @@
 
     function PresensiWizardModal({ type, currentUser, lokasiList, shiftList, toleransiMenit, onClose, onSuccess }) {
       const [step, setStep] = useState(1);
-      const [selectedLokasi, setSelectedLokasi] = useState(() => (Array.isArray(lokasiList) && lokasiList.length ? lokasiList[0] : null));
+      // Karyawan lama tanpa pengaturan lokasi tetap dapat memilih semua lokasi yang tersedia.
+      const availableLokasiList = useMemo(() => {
+        const all = Array.isArray(lokasiList) ? lokasiList : [];
+        const hasAssignment = Array.isArray(currentUser?.lokasi_absen);
+        const assigned = hasAssignment ? currentUser.lokasi_absen.map(String) : [];
+        return hasAssignment ? all.filter(l => assigned.includes(String(l.id))) : all;
+      }, [lokasiList, currentUser?.lokasi_absen]);
+      const [selectedLokasi, setSelectedLokasi] = useState(() => availableLokasiList[0] || null);
 
-      // Jika daftar lokasi baru selesai dimuat setelah modal dibuka, pilih lokasi pertama dengan aman.
+      // Jika daftar lokasi berubah, pastikan lokasi terpilih tetap termasuk lokasi yang diizinkan.
       useEffect(() => {
-        if ((!selectedLokasi || !lokasiList.some(l => String(l.id) === String(selectedLokasi.id))) && lokasiList.length > 0) {
-          setSelectedLokasi(lokasiList[0]);
-        }
-      }, [lokasiList, selectedLokasi]);
+        if ((!selectedLokasi || !availableLokasiList.some(l => String(l.id) === String(selectedLokasi.id))) && availableLokasiList.length > 0) {
+          setSelectedLokasi(availableLokasiList[0]);
+        } else if (!availableLokasiList.length) setSelectedLokasi(null);
+      }, [availableLokasiList, selectedLokasi]);
       const [userCoords, setUserCoords] = useState(null);
       const [distance, setDistance] = useState(null);
       const [inRadius, setInRadius] = useState(false);
@@ -2203,7 +2210,7 @@
                     onChange={(e) => { const nextLocation = lokasiList.find(l => String(l.id) === e.target.value); if (nextLocation) setSelectedLokasi(nextLocation); }} 
                     className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold text-slate-700 outline-none"
                   >
-                    {lokasiList.map(l => (
+                    {availableLokasiList.map(l => (
                       <option key={l.id} value={l.id}>{l.nama_lokasi} (Radius: {l.radius_meter}m)</option>
                     ))}
                   </select>
@@ -3295,7 +3302,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
               <div className="p-4 flex items-center justify-between border-b border-slate-100">
                 {sidebarPinned && (
                   <div className="flex items-center space-x-2">
-                    <img src="Logo Surtok.png" alt="Logo Suryatokoku" className="w-8 h-8 object-contain rounded-lg drop-shadow-xs" />
+                    <img src="Logo SuryaKuCan.png" alt="Logo SuryaKuCan" className="w-8 h-8 object-contain rounded-lg drop-shadow-xs" />
                     <div><h2 className="font-bold text-sm text-slate-800">Admin Panel</h2></div>
                   </div>
                 )}
@@ -3344,6 +3351,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                 setKaryawanList={setKaryawanList} 
                 divisiList={divisiList} 
                 jabatanList={jabatanList} 
+                lokasiList={lokasiList}
                 showToast={showToast} 
                 setPreviewPhotoUrl={setPreviewPhotoUrl}
               />
@@ -4889,11 +4897,13 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
     }
 
     // Modern Minimalist Master Karyawan View
-    function MasterKaryawanView({ karyawanList, setKaryawanList, divisiList, jabatanList, showToast, setPreviewPhotoUrl }) {
+    function MasterKaryawanView({ karyawanList, setKaryawanList, divisiList, jabatanList, lokasiList = [], showToast, setPreviewPhotoUrl }) {
       const [showModal, setShowModal] = useState(false);
       const [editingId, setEditingId] = useState(null);
       const [form, setForm] = useState({ 
         nama_lengkap: '', 
+        nik: '',
+        lokasi_absen: [],
         tgl_lahir: '', 
         username: '', 
         password: '', 
@@ -4974,7 +4984,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
           let alm = {};
           try { alm = typeof k.alamat === 'string' ? JSON.parse(k.alamat) : (k.alamat || {}); } catch (e) { alm = { jalan: k.alamat || '' }; }
           setForm({
-            nama_lengkap: k.nama_lengkap || '', tgl_lahir: toDisplayDate(k.tgl_lahir), username: k.username || '',
+            nama_lengkap: k.nama_lengkap || '', nik: String(k.nik || ''), lokasi_absen: Array.isArray(k.lokasi_absen) ? k.lokasi_absen.map(String) : lokasiList.map(l => String(l.id)), tgl_lahir: toDisplayDate(k.tgl_lahir), username: k.username || '',
             password: k.password || '', no_wa: k.no_wa || '', email: k.email || '', divisi: k.divisi || '',
             jabatan: k.jabatan || '', provinsi: alm.provinsi || '', kota: alm.kota || '',
             kecamatan: alm.kecamatan || '', desa: alm.desa || alm.kelurahan || '', jalan: alm.jalan || '',
@@ -5005,7 +5015,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
           } catch (err) { setWilayahError(err.message || 'Gagal memuat data wilayah.'); }
         } else {
           setEditingId(null);
-          setForm({ nama_lengkap: '', tgl_lahir: '', username: '', password: '', no_wa: '', email: '', divisi: divisiList[0]?.nama_divisi || '', jabatan: '', provinsi: '', kota: '', kecamatan: '', desa: '', jalan: '', foto_profil: '' });
+          setForm({ nama_lengkap: '', nik: '', lokasi_absen: lokasiList.map(l => String(l.id)), tgl_lahir: '', username: '', password: '', no_wa: '', email: '', divisi: divisiList[0]?.nama_divisi || '', jabatan: '', provinsi: '', kota: '', kecamatan: '', desa: '', jalan: '', foto_profil: '' });
           setShowModal(true);
           if (!provinceOptions.length) {
             try { setProvinceOptions(await fetchWilayah('provinces')); }
@@ -5058,6 +5068,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
           showToast('Nomor WhatsApp wajib diawali 08 dan berisi minimal 10 digit (maksimal 15 digit).', 'error');
           return;
         }
+        const nik = String(form.nik || '').trim();
         const tglLahirIso = toIsoDate(form.tgl_lahir);
         if (!tglLahirIso) {
           showToast('Tanggal lahir harus valid dengan format dd/mm/yyyy, contoh 31/12/1998.', 'error');
@@ -5080,7 +5091,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
             }
           }
           const alamat = JSON.stringify({ provinsi: form.provinsi, kota: form.kota, kecamatan: form.kecamatan, desa: form.desa, jalan: form.jalan });
-          const cleanForm = { ...form, tgl_lahir: tglLahirIso, no_wa: noWa, foto_profil: fotoProfilUrl };
+          const cleanForm = { ...form, nik: nik || null, lokasi_absen: (form.lokasi_absen || []).map(String), tgl_lahir: tglLahirIso, no_wa: noWa, foto_profil: fotoProfilUrl };
           if(editingId) {
             setKaryawanList(karyawanList.map(k => k.id === editingId ? { ...k, ...cleanForm, alamat } : k));
           } else {
@@ -5212,6 +5223,11 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                      </div>
 
                      <input type="text" placeholder="Nama Lengkap" value={form.nama_lengkap} onChange={e=>setForm({...form, nama_lengkap:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none" required />
+                     <div>
+                       <label className="text-[10px] font-bold text-slate-400 ml-1 block mb-1">Nomor Induk Karyawan</label>
+                       <input type="text" inputMode="numeric" autoComplete="off" placeholder="Nomor induk karyawan (opsional)" value={form.nik || ''} onChange={e=>setForm({...form, nik:e.target.value.slice(0,40)})} maxLength={40} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" />
+                       <p className="text-[10px] text-slate-400 mt-1 ml-1">Nomor induk karyawan bersifat opsional; panjangnya bebas.</p>
+                     </div>
                      
                      <div className="grid grid-cols-2 gap-2">
                        <div>
@@ -5229,6 +5245,25 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                        <input type="password" placeholder="Password Login" value={form.password} onChange={e=>setForm({...form, password:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none" required />
                      </div>
                      <input type="email" placeholder="Alamat Email" value={form.email} onChange={e=>setForm({...form, email:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none" required />
+
+                     <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-3 space-y-2">
+                       <div className="flex items-center justify-between gap-2">
+                         <label className="text-[10px] font-bold text-indigo-700 block">Master Lokasi Absen</label>
+                         <span className="text-[9px] text-indigo-500">Pilih lokasi yang diizinkan</span>
+                       </div>
+                       {lokasiList.length ? (
+                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                           {[...lokasiList].sort((a,b)=>String(a.nama_lokasi||'').localeCompare(String(b.nama_lokasi||''),'id')).map(loc => {
+                             const checked = (form.lokasi_absen || []).map(String).includes(String(loc.id));
+                             return <label key={loc.id} className={`flex items-start gap-2 p-2 rounded-xl border cursor-pointer ${checked ? 'bg-white border-indigo-300' : 'bg-white/60 border-slate-200'}`}>
+                               <input type="checkbox" checked={checked} onChange={e=>setForm(prev=>({...prev, lokasi_absen: e.target.checked ? [...new Set([...(prev.lokasi_absen||[]).map(String), String(loc.id)])] : (prev.lokasi_absen||[]).map(String).filter(id=>id!==String(loc.id))}))} className="mt-0.5 accent-indigo-600" />
+                               <span className="text-[11px] font-bold text-slate-700">{loc.nama_lokasi}<span className="block text-[9px] font-medium text-slate-400">Radius {loc.radius_meter} m</span></span>
+                             </label>;
+                           })}
+                         </div>
+                       ) : <p className="text-[10px] text-amber-600">Belum ada lokasi. Tambahkan lokasi terlebih dahulu di menu Master Lokasi.</p>}
+                       <p className="text-[9px] text-slate-500">Lokasi yang dipilih akan menjadi pilihan lokasi absen karyawan ini.</p>
+                     </div>
 
                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
                        <div>
