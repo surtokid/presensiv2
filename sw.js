@@ -1,56 +1,49 @@
 
-const CACHE_NAME = 'app-surtok-v2';
+const CACHE_NAME = 'app-suryakucan-v4';
 
-const APP_FILES = [
+const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
-  './Logo%20Surtok.png'
+  './Logo%20SuryaKuCan.png'
 ];
 
-// Instalasi service worker
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(async (cache) => {
-        for (const file of APP_FILES) {
-          try {
-            const response = await fetch(file, {
-              cache: 'no-store'
-            });
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
 
-            if (response.ok) {
-              await cache.put(file, response);
-            }
-          } catch (error) {
-            console.warn('File tidak berhasil di-cache:', file);
-          }
+    for (const path of APP_SHELL) {
+      try {
+        const response = await fetch(path, { cache: 'reload' });
+        if (response.ok) {
+          await cache.put(path, response);
         }
-      })
-      .then(() => self.skipWaiting())
-  );
+      } catch (error) {
+        console.warn('Tidak dapat cache:', path, error);
+      }
+    }
+
+    await self.skipWaiting();
+  })());
 });
 
-// Aktifkan versi baru dan bersihkan cache lama milik App Surtok
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter(
-              (key) =>
-                key.startsWith('app-surtok-') &&
-                key !== CACHE_NAME
-            )
-            .map((key) => caches.delete(key))
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+
+    await Promise.all(
+      keys
+        .filter((key) =>
+          key.startsWith('app-suryakucan-') &&
+          key !== CACHE_NAME
         )
-      )
-      .then(() => self.clients.claim())
-  );
+        .map((key) => caches.delete(key))
+    );
+
+    await self.clients.claim();
+  })());
 });
 
-// Ambil data dari jaringan, gunakan cache jika offline
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
@@ -58,44 +51,37 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Jangan mengubah permintaan ke domain lain, termasuk Supabase
   if (url.origin !== self.location.origin) return;
 
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response && response.ok) {
-          const copy = response.clone();
+  event.respondWith((async () => {
+    try {
+      const response = await fetch(request);
 
-          caches.open(CACHE_NAME)
-            .then((cache) => cache.put(request, copy))
-            .catch((error) => {
-              console.warn('Pembaruan cache gagal:', error);
-            });
-        }
+      if (response && response.ok) {
+        const cache = await caches.open(CACHE_NAME);
+        cache.put(request, response.clone()).catch(() => {});
+      }
 
-        return response;
-      })
-      .catch(async () => {
-        const cached = await caches.match(request);
+      return response;
+    } catch (error) {
+      const cached = await caches.match(request);
 
-        if (cached) return cached;
+      if (cached) return cached;
 
-        if (request.mode === 'navigate') {
-          const appPage = await caches.match('./index.html');
+      if (request.mode === 'navigate') {
+        const appPage = await caches.match('./index.html');
+        if (appPage) return appPage;
+      }
 
-          if (appPage) return appPage;
-        }
-
-        return new Response(
-          'Koneksi internet tidak tersedia dan halaman belum tersimpan.',
-          {
-            status: 503,
-            headers: {
-              'Content-Type': 'text/plain; charset=utf-8'
-            }
+      return new Response(
+        'Halaman tidak tersedia saat offline.',
+        {
+          status: 503,
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8'
           }
-        );
-      })
-  );
+        }
+      );
+    }
+  })());
 });
