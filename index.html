@@ -1110,10 +1110,11 @@
               String(p.tanggal || '').slice(0, 10) === yStr
             );
 
-            try { sessionStorage.setItem(checkKey, 'true'); } catch (_) {}
             if (!cancelled && !hasDirectRecord && !hasLoadedRecord) {
+              // Jangan menandai pemeriksaan selesai sebelum karyawan memilih dan data tersimpan.
               setShowYesterdayCheck(true);
             } else if (!cancelled) {
+              try { sessionStorage.setItem(checkKey, 'true'); } catch (_) {}
               setShowYesterdayCheck(false);
             }
           } catch (err) {
@@ -1274,45 +1275,93 @@
         }
       };
 
-      const handleYesterdayConfirm = (status, note) => {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yStr = yesterday.toISOString().split('T')[0];
-        
-        const newRecord = {
-          id: 'prs-' + Date.now(),
-          karyawan_id: currentUser.id,
-          karyawan_nama: currentUser.nama_lengkap,
-          divisi: currentUser.divisi,
-          tipe: 'masuk',
-          status: status,
-          shift_nama: 'Konfirmasi Mandiri',
-          lokasi_nama: 'Dikonfirmasi Kemarin',
-          latitude: 0,
-          longitude: 0,
-          foto_url: '',
-          keterangan: note || 'Konfirmasi presensi kemarin',
-          tanggal: yStr,
-          jam: '08:00:00',
-          created_at: new Date().toISOString()
-        };
+      const handleYesterdayConfirm = async (status, note) => {
+        // Simpan ke tanggal kalender kemarin berdasarkan waktu lokal; jangan hanya mengubah state React.
+        const nowLocal = new Date();
+        const yesterday = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate() - 1);
+        const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
 
-        setPresensiList([newRecord, ...presensiList]);
-        
-        if (status === 'Libur' && currentUser.sisa_libur > 0) {
-          setCurrentUser({...currentUser, sisa_libur: currentUser.sisa_libur - 1});
-        } else if (status === 'Cuti' && currentUser.sisa_cuti > 0) {
-          setCurrentUser({...currentUser, sisa_cuti: currentUser.sisa_cuti - 1});
+        // Cegah duplikasi dengan memeriksa Supabase langsung sebelum menyimpan.
+        try {
+          const client = await getSupabaseClient();
+          const { data: existingRows, error: checkError } = await client
+            .from('presensi')
+            .select('id, karyawan_id, tanggal, status, tipe')
+            .eq('karyawan_id', currentUser.id)
+            .eq('tanggal', yStr)
+            .limit(1);
+
+          if (checkError) throw checkError;
+          if (Array.isArray(existingRows) && existingRows.length > 0) {
+            const existing = existingRows[0];
+            // Catatan sudah ada di database; cukup tutup popup. Jangan memasukkan
+            // object parsial hasil query ke state riwayat.
+            setShowYesterdayCheck(false);
+            try {
+              const now = new Date();
+              const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+              sessionStorage.setItem(`yesterday_checked_v2_${currentUser.id}_${todayKey}`, 'true');
+            } catch (_) {}
+            showToast(`Presensi tanggal ${yStr} sudah tercatat sebagai ${existing.status || 'presensi'}.`, 'info');
+            return;
+          }
+
+          const now = new Date();
+          const newRecord = {
+            id: 'prs-' + Date.now(),
+            karyawan_id: currentUser.id,
+            karyawan_nama: currentUser.nama_lengkap,
+            divisi: currentUser.divisi,
+            tipe: 'masuk',
+            status,
+            shift_nama: 'Konfirmasi Mandiri',
+            lokasi_nama: 'Dikonfirmasi Kemarin',
+            latitude: 0,
+            longitude: 0,
+            foto_url: '',
+            keterangan: note || 'Konfirmasi presensi kemarin',
+            tanggal: yStr,
+            jam: '08:00:00',
+            created_at: now.toISOString()
+          };
+
+          const { error: insertError } = await client.from('presensi').insert([newRecord]);
+          if (insertError) throw insertError;
+
+          // Update UI hanya setelah Supabase mengonfirmasi insert berhasil.
+          setPresensiList(prev => [
+            newRecord,
+            ...prev.filter(p => !(
+              String(p.karyawan_id) === String(currentUser.id) &&
+              String(p.tanggal || '').slice(0, 10) === yStr
+            ))
+          ]);
+
+          if (status === 'Libur' && Number(currentUser.sisa_libur) > 0) {
+            setCurrentUser(prev => ({ ...prev, sisa_libur: Number(prev.sisa_libur) - 1 }));
+          } else if (status === 'Cuti' && Number(currentUser.sisa_cuti) > 0) {
+            setCurrentUser(prev => ({ ...prev, sisa_cuti: Number(prev.sisa_cuti) - 1 }));
+          }
+
+          setShowYesterdayCheck(false);
+          try {
+            const nowToday = new Date();
+            const todayKey = `${nowToday.getFullYear()}-${String(nowToday.getMonth() + 1).padStart(2, '0')}-${String(nowToday.getDate()).padStart(2, '0')}`;
+            sessionStorage.setItem(`yesterday_checked_v2_${currentUser.id}_${todayKey}`, 'true');
+          } catch (_) {}
+          showToast(`Presensi tanggal ${yStr} berhasil disimpan sebagai ${status}.`);
+        } catch (error) {
+          console.error('Gagal menyimpan konfirmasi presensi kemarin ke Supabase:', error);
+          showToast(`Presensi belum tersimpan ke Supabase: ${error?.message || 'periksa koneksi, izin akses, dan struktur tabel.'}`, 'error');
+          // Popup tetap terbuka agar karyawan bisa mencoba lagi setelah masalah diperbaiki.
         }
-        
-        setShowYesterdayCheck(false);
-        showToast(`Presensi kemarin dicatat sebagai ${status}!`);
       };
 
       const handleYesterdayClaimHR = () => {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yStr = yesterday.toISOString().split('T')[0];
+        // Klaim HR harus memakai tanggal kemarin menurut kalender lokal pengguna.
+        const nowLocal = new Date();
+        const yesterday = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate() - 1);
+        const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
         
         const claim = {
           id: 'klm-' + Date.now(),
@@ -1778,7 +1827,16 @@
                 <span className="text-[9px] font-bold">Riwayat</span>
               </button>
               <button onClick={() => navigateTo('#profil')} className={`flex flex-col items-center space-y-1 transition ${currentRoute === '#profil' ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
-                <i className="fa-solid fa-circle-user text-lg"></i>
+                {currentUser?.foto_profil ? (
+                  <img
+                    key={`${currentUser.foto_profil}_${currentUser.foto_profil_updated_at || 'nav'}`}
+                    src={getProfileImageUrl(currentUser.foto_profil, currentUser.foto_profil_updated_at || 'nav')}
+                    alt="Foto profil"
+                    className={`w-6 h-6 rounded-full object-cover border-2 ${currentRoute === '#profil' ? 'border-violet-600' : 'border-slate-300'}`}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
+                  />
+                ) : null}
+                <i className={`fa-solid fa-circle-user text-lg ${currentUser?.foto_profil ? 'hidden' : ''}`}></i>
                 <span className="text-[9px] font-bold">Profil</span>
               </button>
             </nav>
