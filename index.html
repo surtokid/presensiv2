@@ -578,22 +578,23 @@
     const setLemburListSynced = makeSyncedSetter('lembur', 'pengajuan_lembur', setLemburList);
     const setKlaimListSynced = makeSyncedSetter('klaim', 'klaim_kehadiran', setKlaimList);
 
-    const setToleransiMenitSynced = (valueOrUpdater) => {
-      const value = typeof valueOrUpdater === 'function' ? valueOrUpdater(toleransiMenit) : valueOrUpdater;
+    const setToleransiMenitSynced = async (valueOrUpdater) => {
+      const value = Number(typeof valueOrUpdater === 'function' ? valueOrUpdater(toleransiMenit) : valueOrUpdater);
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error('Nilai toleransi harus berupa angka 0 atau lebih.');
+      }
+      const client = await getSupabaseClient();
+      // Simpan ke Supabase terlebih dahulu; jangan memberi kesan berhasil jika database gagal.
+      const { error } = await client.from('settings').upsert(
+        { key: 'toleransi_menit', value: String(value) },
+        { onConflict: 'key' }
+      );
+      if (error) {
+        console.error('Gagal menyimpan settings toleransi:', error);
+        throw error;
+      }
       setToleransiMenit(value);
-      (async () => {
-        try {
-          const client = await getSupabaseClient();
-          const { error } = await client.from('settings').upsert(
-            { key: 'toleransi_menit', value: String(value) },
-            { onConflict: 'key' }
-          );
-          if (error) throw error;
-        } catch (error) {
-          console.error('Gagal menyimpan settings toleransi:', error);
-          showToast(`Gagal menyimpan toleransi ke Supabase: ${error.message || 'periksa tabel settings/RLS'}`, 'error');
-        }
-      })();
+      return value;
     };
 
     useEffect(() => {
@@ -1881,7 +1882,22 @@
       const [gpsLoading, setGpsLoading] = useState(true);
       const [gpsAccuracy, setGpsAccuracy] = useState(null);
 
-      const [selectedShift, setSelectedShift] = useState(shiftList[0]?.nama_shift || '');
+      // Urutkan shift berdasarkan jam masuk paling awal terlebih dahulu.
+      const sortedShiftList = [...(Array.isArray(shiftList) ? shiftList : [])].sort((a, b) => {
+        const toMinutes = (value) => {
+          const match = String(value || '').match(/^(\d{1,2}):(\d{2})/);
+          return match ? Number(match[1]) * 60 + Number(match[2]) : Number.MAX_SAFE_INTEGER;
+        };
+        return toMinutes(a.jam_masuk) - toMinutes(b.jam_masuk) ||
+          String(a.nama_shift || '').localeCompare(String(b.nama_shift || ''), 'id');
+      });
+      const [selectedShift, setSelectedShift] = useState(sortedShiftList[0]?.nama_shift || '');
+      // Jika daftar shift baru selesai dimuat, pilih shift dengan jam masuk paling pagi.
+      useEffect(() => {
+        if (sortedShiftList.length && !sortedShiftList.some(s => s.nama_shift === selectedShift)) {
+          setSelectedShift(sortedShiftList[0].nama_shift || '');
+        }
+      }, [shiftList, selectedShift]);
       const [statusPulang, setStatusPulang] = useState('Pulang');
       const [alasanPulang, setAlasanPulang] = useState('');
 
@@ -2265,7 +2281,7 @@
                 {type === 'masuk' ? (
                   <div className="space-y-2.5">
                     <label className="text-[10px] font-bold text-slate-400 block mb-1">Pilih Shift Kerja Hari Ini</label>
-                    {shiftList.map(s => (
+                    {sortedShiftList.map(s => (
                       <div 
                         key={s.id} 
                         onClick={() => setSelectedShift(s.nama_shift)} 
@@ -2277,7 +2293,7 @@
                       >
                         <div>
                           <span className="font-bold block text-sm">{s.nama_shift}</span>
-                          <span className="text-[10px] opacity-80">{s.jam_masuk} - {s.jam_pulang} WIB</span>
+                          <span className="text-[10px] opacity-80">{formatShiftTimeDisplay(s.jam_masuk)} - {formatShiftTimeDisplay(s.jam_pulang)} WIB</span>
                         </div>
                         {selectedShift === s.nama_shift && <i className="fa-solid fa-circle-check text-violet-500 text-lg"></i>}
                       </div>
@@ -5366,18 +5382,31 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
       );
     }
 
+    const formatShiftTimeDisplay = (value) => {
+      const match = String(value ?? '').match(/^(\d{1,2}:\d{2})/);
+      return match ? match[1].padStart(5, '0') : String(value ?? '');
+    };
+
     function MasterShiftView({ shiftList, setShiftList, toleransiMenit, setToleransiMenit, showToast }) {
       const [showModal, setShowModal] = useState(false);
       const [editingId, setEditingId] = useState(null);
       const [form, setForm] = useState({ nama_shift: '', jam_masuk: '08:00', jam_pulang: '17:00' });
       const [tempToleransi, setTempToleransi] = useState(toleransiMenit);
 
-      const sortedList = [...shiftList].sort((a, b) => a.nama_shift.localeCompare(b.nama_shift));
+      // Urutkan Master Shift berdasarkan jam masuk paling pagi, lalu nama shift.
+      const sortedList = [...shiftList].sort((a, b) => {
+        const toMinutes = (value) => {
+          const match = String(value || '').match(/^(\d{1,2}):(\d{2})/);
+          return match ? Number(match[1]) * 60 + Number(match[2]) : Number.MAX_SAFE_INTEGER;
+        };
+        return toMinutes(a.jam_masuk) - toMinutes(b.jam_masuk) ||
+          String(a.nama_shift || '').localeCompare(String(b.nama_shift || ''), 'id');
+      });
 
       const openModal = (item = null) => {
         if(item) {
           setEditingId(item.id);
-          setForm({ nama_shift: item.nama_shift, jam_masuk: item.jam_masuk, jam_pulang: item.jam_pulang });
+          setForm({ nama_shift: item.nama_shift, jam_masuk: formatShiftTimeDisplay(item.jam_masuk), jam_pulang: formatShiftTimeDisplay(item.jam_pulang) });
         } else {
           setEditingId(null);
           setForm({ nama_shift: '', jam_masuk: '08:00', jam_pulang: '17:00' });
@@ -5385,20 +5414,63 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
         setShowModal(true);
       };
 
+      // Format otomatis ke HH:MM saat angka menit mulai dimasukkan.
+      // Input boleh dikosongkan sepenuhnya ketika mengedit; validasi dilakukan saat Simpan.
+      const formatShiftTimeInput = (value) => {
+        const digits = String(value || '').replace(/\D/g, '').slice(0, 4);
+        if (digits.length <= 2) return digits;
+        return digits.slice(0, 2) + ':' + digits.slice(2);
+      };
+
+      const isValidShiftTime = (value) => {
+        const match = String(value || '').match(/^(\d{2}):(\d{2})$/);
+        if (!match) return false;
+        const hours = Number(match[1]);
+        const minutes = Number(match[2]);
+        return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+      };
+
       const handleSave = (e) => {
         e.preventDefault();
+        if (!String(form.nama_shift || '').trim()) {
+          showToast('Nama shift wajib diisi!', 'error');
+          return;
+        }
+        if (!isValidShiftTime(form.jam_masuk) || !isValidShiftTime(form.jam_pulang)) {
+          showToast('Isi jam masuk dan jam pulang dengan format HH:MM (24 jam), contoh 08:30.', 'error');
+          return;
+        }
+        const cleanForm = {
+          ...form,
+          nama_shift: String(form.nama_shift).trim(),
+          jam_masuk: form.jam_masuk,
+          jam_pulang: form.jam_pulang
+        };
         if(editingId) {
-          setShiftList(shiftList.map(item => item.id === editingId ? { ...item, ...form } : item));
+          setShiftList(shiftList.map(item => item.id === editingId ? { ...item, ...cleanForm } : item));
         } else {
-          setShiftList([...shiftList, { id: 'sh-' + Date.now(), ...form }]);
+          setShiftList([...shiftList, { id: 'sh-' + Date.now(), ...cleanForm }]);
         }
         setShowModal(false);
         showToast(editingId ? 'Shift diperbarui!' : 'Shift ditambahkan!');
       };
 
-      const handleSaveToleransi = () => {
-        setToleransiMenit(Number(tempToleransi));
-        showToast(`Toleransi diperbarui menjadi ${tempToleransi} menit!`);
+      useEffect(() => {
+        setTempToleransi(toleransiMenit);
+      }, [toleransiMenit]);
+
+      const handleSaveToleransi = async () => {
+        const value = Number(tempToleransi);
+        if (!Number.isFinite(value) || value < 0 || String(tempToleransi).trim() === '') {
+          showToast('Masukkan toleransi dalam menit yang valid.', 'error');
+          return;
+        }
+        try {
+          await setToleransiMenit(value);
+          showToast(`Toleransi berhasil disimpan: ${value} menit.`);
+        } catch (error) {
+          showToast(`Toleransi gagal disimpan: ${error.message || 'periksa koneksi dan izin tabel settings.'}`, 'error');
+        }
       };
 
       return (
@@ -5489,9 +5561,9 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 block mb-1">Jam Masuk</label>
                       <input 
-                        type="time" 
+                        type="text" inputMode="numeric" maxLength={5} placeholder="HH:MM" 
                         value={form.jam_masuk} 
-                        onChange={e=>setForm({...form, jam_masuk:e.target.value})} 
+                        onChange={e=>setForm({...form, jam_masuk:formatShiftTimeInput(e.target.value)})} 
                         className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" 
                         required 
                       />
@@ -5499,9 +5571,9 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 block mb-1">Jam Pulang</label>
                       <input 
-                        type="time" 
+                        type="text" inputMode="numeric" maxLength={5} placeholder="HH:MM" 
                         value={form.jam_pulang} 
-                        onChange={e=>setForm({...form, jam_pulang:e.target.value})} 
+                        onChange={e=>setForm({...form, jam_pulang:formatShiftTimeInput(e.target.value)})} 
                         className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" 
                         required 
                       />
