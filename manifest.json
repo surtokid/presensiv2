@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "App Surtok",
-  "short_name": "App Surtok",
-  "description": "Aplikasi presensi dan HRIS Surtok",
+  "name": "App SuryaKuCan",
+  "short_name": "App SuryaKuCan",
+  "description": "Aplikasi presensi dan HRIS SuryaKuCan",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -11,13 +11,13 @@
   "theme_color": "#ec4899",
   "icons": [
     {
-      "src": "./Logo%20Surtok.png",
+      "src": "./Logo%20SuryaKuCan.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./Logo%20Surtok.png",
+      "src": "./Logo%20SuryaKuCan.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
