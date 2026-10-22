@@ -1069,25 +1069,60 @@
       }, []);
 
       useEffect(() => {
-        // Tunggu data presensi dari Supabase berhasil dimuat agar daftar yang masih kosong
-        // pada awal aplikasi tidak memicu popup secara keliru.
+        // Jangan pernah membuka popup hanya berdasarkan daftar lokal yang mungkin masih kosong.
+        // Tunggu muatan awal selesai, lalu verifikasi langsung ke Supabase untuk tanggal kemarin.
         if (!isPresensiReady || !currentUser?.id) return;
 
+        let cancelled = false;
         const now = new Date();
         const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        const checkKey = `yesterday_checked_${currentUser.id}_${todayKey}`;
-        if (sessionStorage.getItem(checkKey)) return;
+        // Versi key dinaikkan supaya hasil pemeriksaan lama tidak memengaruhi logika yang baru.
+        const checkKey = `yesterday_checked_v2_${currentUser.id}_${todayKey}`;
+        try {
+          if (sessionStorage.getItem(checkKey)) return;
+        } catch (_) {}
 
         const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
         const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
-        const hasPresensiKemarin = presensiList.some(p =>
-          String(p.karyawan_id) === String(currentUser.id) && String(p.tanggal || '').slice(0, 10) === yStr
-        );
 
-        // Tandai sudah diperiksa hanya setelah data Supabase siap.
-        sessionStorage.setItem(checkKey, 'true');
-        if (!hasPresensiKemarin) setShowYesterdayCheck(true);
-      }, [currentUser?.id, presensiList, isPresensiReady]);
+        (async () => {
+          try {
+            const client = await getSupabaseClient();
+            const { data, error } = await client
+              .from('presensi')
+              .select('id, karyawan_id, tanggal, status, tipe')
+              .eq('karyawan_id', currentUser.id)
+              .eq('tanggal', yStr)
+              .limit(1);
+
+            // Jika query gagal, jangan menampilkan popup dan jangan menandai pemeriksaan selesai.
+            // Ini mencegah prompt keliru saat koneksi/RLS/data Supabase belum siap.
+            if (cancelled || error) {
+              if (error) console.warn('Verifikasi presensi kemarin gagal; popup ditunda:', error.message);
+              return;
+            }
+
+            // Query langsung ke Supabase adalah sumber utama. Fallback daftar state menangani
+            // perbedaan tipe ID atau format tanggal pada data yang sudah dimuat.
+            const hasDirectRecord = Array.isArray(data) && data.length > 0;
+            const hasLoadedRecord = presensiList.some(p =>
+              String(p.karyawan_id) === String(currentUser.id) &&
+              String(p.tanggal || '').slice(0, 10) === yStr
+            );
+
+            try { sessionStorage.setItem(checkKey, 'true'); } catch (_) {}
+            if (!cancelled && !hasDirectRecord && !hasLoadedRecord) {
+              setShowYesterdayCheck(true);
+            } else if (!cancelled) {
+              setShowYesterdayCheck(false);
+            }
+          } catch (err) {
+            console.warn('Belum dapat memverifikasi presensi kemarin; popup ditunda:', err);
+          }
+        })();
+
+        return () => { cancelled = true; };
+      }, [currentUser?.id, isPresensiReady]);
 
       const payrollCycle = useMemo(() => {
         const now = new Date();
