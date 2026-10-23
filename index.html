@@ -367,6 +367,18 @@
       });
     }
 
+const DEFAULT_MORE_APPS = [
+  { label: 'Cek Harga Surtok', icon: 'fa-magnifying-glass-dollar', description: 'Pengecekan harga produk Surtok.', color: 'from-violet-50 to-purple-100', ink: 'text-violet-700' },
+  { label: 'Cek Harga Surcan', icon: 'fa-tags', description: 'Pengecekan harga produk Surcan.', color: 'from-sky-50 to-cyan-100', ink: 'text-sky-700' },
+  { label: 'Request Harga Coret', icon: 'fa-percent', description: 'Pengajuan harga coret.', color: 'from-amber-50 to-orange-100', ink: 'text-amber-700' },
+  { label: 'Request Purchase Order', icon: 'fa-cart-shopping', description: 'Pengajuan purchase order.', color: 'from-emerald-50 to-teal-100', ink: 'text-emerald-700' },
+  { label: 'Request Price Tag', icon: 'fa-ticket', description: 'Permintaan price tag.', color: 'from-fuchsia-50 to-pink-100', ink: 'text-fuchsia-700' },
+  { label: 'Request Wobbler', icon: 'fa-sign-hanging', description: 'Permintaan materi wobbler.', color: 'from-fuchsia-50 to-pink-100', ink: 'text-fuchsia-700' },
+  { label: 'Stock Opname', icon: 'fa-clipboard-check', description: 'Pencatatan dan pemeriksaan stok.', color: 'from-indigo-50 to-sky-100', ink: 'text-indigo-700' },
+  { label: 'Kasir Surtok', icon: 'fa-cash-register', description: 'Kasir untuk event di luar toko.', color: 'from-pink-50 to-rose-100', ink: 'text-rose-700' },
+  { label: 'Kasir Surcan', icon: 'fa-store', description: 'Kasir untuk event di luar toko.', color: 'from-cyan-50 to-teal-100', ink: 'text-teal-700' }
+];
+
     function App() {
       const [currentRoute, setCurrentRoute] = useState(window.location.hash || '#karyawan');
     
@@ -397,6 +409,8 @@
       const [isAdminTableEmpty, setIsAdminTableEmpty] = useState(false);
       const [toleransiMenit, setToleransiMenit] = useState(15);
       const [pendaftaranKaryawanAktif, setPendaftaranKaryawanAktif] = useState(false);
+      const [moreAppsAccess, setMoreAppsAccess] = useState({});
+      const [moreAppsCatalog, setMoreAppsCatalog] = useState(DEFAULT_MORE_APPS);
         
       const [presensiList, setPresensiList] = useState([]);
       const [isPresensiReady, setIsPresensiReady] = useState(false);
@@ -425,7 +439,7 @@
               client.from('presensi').select('*').order('created_at', { ascending: false }),
               client.from('pengajuan_lembur').select('*').order('created_at', { ascending: false }),
               client.from('klaim_kehadiran').select('*'),
-              client.from('settings').select('key,value').in('key', ['toleransi_menit', 'pendaftaran_karyawan_aktif'])
+              client.from('settings').select('key,value').in('key', ['toleransi_menit', 'pendaftaran_karyawan_aktif', 'more_apps_access', 'more_apps_catalog'])
             ]);
 
             if (!isMounted) return;
@@ -470,6 +484,10 @@
               const settingsRows = settingsRes.data || [];
               const toleransiSetting = settingsRows.find(x => x.key === 'toleransi_menit');
               const pendaftaranSetting = settingsRows.find(x => x.key === 'pendaftaran_karyawan_aktif');
+              const moreAppsSetting = settingsRows.find(x => x.key === 'more_apps_access');
+              const moreAppsCatalogSetting = settingsRows.find(x => x.key === 'more_apps_catalog');
+              if (moreAppsSetting?.value) { try { const parsed = typeof moreAppsSetting.value === 'string' ? JSON.parse(moreAppsSetting.value) : moreAppsSetting.value; setMoreAppsAccess(parsed && typeof parsed === 'object' ? parsed : {}); } catch (e) { console.warn('Pengaturan akses More Apps tidak valid:', e); setMoreAppsAccess({}); } }
+              if (moreAppsCatalogSetting?.value) { try { const parsedCatalog = typeof moreAppsCatalogSetting.value === 'string' ? JSON.parse(moreAppsCatalogSetting.value) : moreAppsCatalogSetting.value; if (Array.isArray(parsedCatalog)) setMoreAppsCatalog(parsedCatalog); } catch (e) { console.warn('Katalog More Apps tidak valid:', e); } }
               if (toleransiSetting?.value != null && toleransiSetting.value !== '') {
                 const value = Number(toleransiSetting.value);
                 if (Number.isFinite(value)) setToleransiMenit(value);
@@ -619,6 +637,30 @@
       return value;
     };
 
+    const setMoreAppsAccessSynced = async (nextValue) => {
+      const value = nextValue && typeof nextValue === 'object' ? nextValue : {};
+      const client = await getSupabaseClient();
+      const { error } = await client.from('settings').upsert(
+        { key: 'more_apps_access', value: JSON.stringify(value) },
+        { onConflict: 'key' }
+      );
+      if (error) throw error;
+      setMoreAppsAccess(value);
+      return value;
+    };
+
+    const setMoreAppsCatalogSynced = async (nextValue) => {
+      const value = Array.isArray(nextValue) ? nextValue : [];
+      const client = await getSupabaseClient();
+      const { error } = await client.from('settings').upsert(
+        { key: 'more_apps_catalog', value: JSON.stringify(value) },
+        { onConflict: 'key' }
+      );
+      if (error) throw error;
+      setMoreAppsCatalog(value);
+      return value;
+    };
+
     useEffect(() => {
       const handleHashChange = () => {
         setCurrentRoute(window.location.hash || '#karyawan');
@@ -634,14 +676,33 @@
 
     const isDashboardRoute = currentRoute.startsWith('#dashboard');
 
-    const handleLoginKaryawan = (identifier, password) => {
-      const trimmedId = identifier.trim().toLowerCase();
-      const user = karyawanList.find(k => 
-        ((k.username || '').toLowerCase() === trimmedId || 
-         k.no_wa === trimmedId || 
-         (k.email || '').toLowerCase() === trimmedId) && 
-        k.password === password
+    const handleLoginKaryawan = async (identifier, password) => {
+      const trimmedId = String(identifier || '').trim().toLowerCase();
+      const findUser = (list) => (Array.isArray(list) ? list : []).find(k =>
+        (((k.username || '').toString().trim().toLowerCase() === trimmedId) ||
+         ((k.no_wa || '').toString().trim().toLowerCase() === trimmedId) ||
+         ((k.email || '').toString().trim().toLowerCase() === trimmedId)) &&
+        String(k.password ?? '') === String(password ?? '')
       );
+
+      // Cek cache state terlebih dahulu agar login tetap cepat.
+      let user = findUser(karyawanList);
+      // Jika tidak ditemukan, ambil data terbaru dari Supabase. Ini penting setelah
+      // pendaftaran baru agar karyawan tidak perlu me-refresh halaman secara manual.
+      if (!user) {
+        try {
+          const client = await getSupabaseClient();
+          const { data, error } = await client.from('master_karyawan').select('*');
+          if (error) throw error;
+          const latestList = Array.isArray(data) ? data : [];
+          setKaryawanList(latestList);
+          user = findUser(latestList);
+        } catch (error) {
+          console.error('Gagal menyegarkan data karyawan saat login:', error);
+          showToast('Data login belum dapat diperbarui dari server. Periksa koneksi lalu coba lagi.', 'error');
+          return { success: false, message: 'Gagal memuat data terbaru' };
+        }
+      }
 
       if (user) {
         setCurrentUser(user);
@@ -719,7 +780,7 @@
     return (
       <div className="min-h-screen flex flex-col justify-between">
         {/* Top Navigation Bar: Ditampilkan kembali */}
-        <header className="hidden bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
+        <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
           {/* Brand Logo */}
           <div 
             onClick={() => navigateTo(isDashboardRoute ? '#dashboard' : '#karyawan')}
@@ -824,6 +885,10 @@
                 setToleransiMenit={setToleransiMenitSynced}
                 pendaftaranKaryawanAktif={pendaftaranKaryawanAktif}
                 setPendaftaranKaryawanAktif={setPendaftaranKaryawanAktifSynced}
+                moreAppsAccess={moreAppsAccess}
+                setMoreAppsAccess={setMoreAppsAccessSynced}
+                moreAppsCatalog={moreAppsCatalog}
+                setMoreAppsCatalog={setMoreAppsCatalogSynced}
                 showToast={showToast}
                 handleLogout={handleLogout}
               />
@@ -845,6 +910,8 @@
             isEmployeeAuthenticated ? (
               <KaryawanPortal 
                 currentUser={currentUser}
+                moreAppsAccess={moreAppsAccess}
+                moreAppsCatalog={moreAppsCatalog}
                 setCurrentUser={setCurrentUser}
                 setKaryawanList={setKaryawanList}
                 karyawanList={karyawanList}
@@ -1013,22 +1080,22 @@
 
     const loginRole = forcedRole;
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
       e.preventDefault();
       if (!identifier.trim() || !password.trim()) {
         showToast('Harap isi semua kolom login', 'error');
         return;
       }
-
       setIsLoading(true);
-      setTimeout(() => {
-        setIsLoading(false);
+      try {
         if (loginRole === 'karyawan') {
-          onLoginKaryawan(identifier, password);
+          await onLoginKaryawan(identifier, password);
         } else {
-          onLoginAdmin(identifier, password);
+          await onLoginAdmin(identifier, password);
         }
-      }, 500);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     // Quick Login Demo Helper
@@ -1204,6 +1271,8 @@
 
     function KaryawanPortal({
       currentUser,
+      moreAppsAccess = {},
+      moreAppsCatalog = DEFAULT_MORE_APPS,
       setCurrentUser,
       setKaryawanList,
       karyawanList,
@@ -1704,17 +1773,7 @@
           ) : currentRoute === '#more-apps' ? (
             <div className="px-5 pt-4 pb-28 space-y-5">
               <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: 'Cek Harga Surtok', icon: 'fa-magnifying-glass-dollar', color: 'from-violet-50 to-purple-100', ink: 'text-violet-700' },
-                  { label: 'Cek Harga Surcan', icon: 'fa-tags', color: 'from-sky-50 to-blue-100', ink: 'text-blue-700' },
-                  { label: 'Request Harga Coret', icon: 'fa-percent', color: 'from-rose-50 to-pink-100', ink: 'text-rose-700' },
-                  { label: 'Request Purchase Order', icon: 'fa-cart-shopping', color: 'from-amber-50 to-orange-100', ink: 'text-orange-700' },
-                  { label: 'Request Price Tag', icon: 'fa-ticket', color: 'from-emerald-50 to-teal-100', ink: 'text-emerald-700' },
-                  { label: 'Request Wobbler', icon: 'fa-sign-hanging', color: 'from-fuchsia-50 to-pink-100', ink: 'text-fuchsia-700' },
-                  { label: 'Stock Opname', icon: 'fa-clipboard-check', color: 'from-indigo-50 to-sky-100', ink: 'text-indigo-700', description: 'Pencatatan dan pemeriksaan stok.' },
-                  { label: 'Kasir Surtok', icon: 'fa-cash-register', color: 'from-pink-50 to-rose-100', ink: 'text-rose-700', description: 'Kasir untuk event di luar toko.' },
-                  { label: 'Kasir Surcan', icon: 'fa-store', color: 'from-cyan-50 to-teal-100', ink: 'text-teal-700', description: 'Kasir untuk event di luar toko.' }
-                ].map((app) => (
+                {(Array.isArray(moreAppsCatalog) ? moreAppsCatalog : DEFAULT_MORE_APPS).filter(app => app && typeof app === 'object' && typeof app.label === 'string' && app.label.trim()).map(app => ({ color: app.color || 'from-violet-50 to-purple-100', ink: app.ink || 'text-violet-700', icon: app.icon || 'fa-layer-group', description: app.description || 'Akses cepat untuk kebutuhan operasional.', ...app })).filter(app => Array.isArray(moreAppsAccess?.[app.label]) && moreAppsAccess[app.label].some(id => String(id) === String(currentUser?.id))).map((app) => (
                   <button key={app.label} onClick={() => setShowComingSoonApp(app.label)} className="group min-h-[142px] text-left bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition active:scale-[0.98]">
                     <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${app.color} ${app.ink} flex items-center justify-center text-lg mb-3 group-hover:scale-105 transition`}><i className={`fa-solid ${app.icon}`}></i></div>
                     <div className="text-xs font-extrabold text-slate-800 leading-snug">{app.label}</div>
@@ -1722,6 +1781,9 @@
                     <div className="mt-2 flex items-center justify-between"><span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Coming soon</span><i className="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-300"></i></div>
                   </button>
                 ))}
+                {!( (Array.isArray(moreAppsCatalog) ? moreAppsCatalog : DEFAULT_MORE_APPS).filter(app => app && typeof app === 'object' && typeof app.label === 'string' && app.label.trim()).some(app => Array.isArray(moreAppsAccess?.[app.label]) && moreAppsAccess[app.label].some(id => String(id) === String(currentUser?.id))) ) && (
+                  <div className="col-span-2 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center"><div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-500"><i className="fa-solid fa-grid-2 text-xl"></i></div><p className="text-sm font-bold text-slate-700">Belum ada aplikasi yang ditetapkan</p><p className="mt-1 text-xs text-slate-500">Hubungi admin HR jika Anda memerlukan akses More Apps.</p></div>
+                )}
               </div>
             </div>
           ) : currentRoute === '#daftar-pengumuman' ? (
@@ -3587,11 +3649,26 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
     /* ==========================================
        ADMIN DASHBOARD WORKSPACE (Minimalist Light)
        ========================================== */
+    // Helper global agar penanda kelengkapan data bisa dipakai di dashboard admin maupun Master Karyawan.
+    function isKaryawanDataIncompleteGlobal(k) {
+      const parseAlamat = (value) => {
+        try { return typeof value === 'string' ? JSON.parse(value || '{}') : (value || {}); }
+        catch (_) { return {}; }
+      };
+      const alamat = parseAlamat(k?.alamat);
+      const requiredValues = [
+        k?.nama_lengkap, k?.tgl_lahir, k?.username, k?.password,
+        k?.no_wa, k?.email, k?.divisi, k?.jabatan,
+        alamat?.provinsi, alamat?.kota, alamat?.kecamatan, alamat?.desa || alamat?.kelurahan
+      ];
+      return requiredValues.some(value => value === null || value === undefined || String(value).trim() === '');
+    }
+
     function AdminDashboard({
       karyawanList, setKaryawanList, presensiList, setPresensiList, lokasiList, setLokasiList,
       divisiList, setDivisiList, jabatanList, setJabatanList, shiftList, setShiftList, pengumumanList, setPengumumanList,
       adminList, setAdminList,
-      lemburList, setLemburList, klaimList, setKlaimList, toleransiMenit, setToleransiMenit, pendaftaranKaryawanAktif, setPendaftaranKaryawanAktif, showToast, handleLogout
+      lemburList, setLemburList, klaimList, setKlaimList, toleransiMenit, setToleransiMenit, pendaftaranKaryawanAktif, setPendaftaranKaryawanAktif, moreAppsAccess = {}, setMoreAppsAccess, moreAppsCatalog = DEFAULT_MORE_APPS, setMoreAppsCatalog, showToast, handleLogout
     }) {
       const [activeModule, setActiveModule] = useState('harian'); 
       const [sidebarPinned, setSidebarPinned] = useState(true);
@@ -3835,6 +3912,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                   { id: 'periode', label: 'Rekapan 26-25', icon: 'fa-calendar-week' },
                   { id: 'libur_cuti', label: 'Master Libur & Cuti', icon: 'fa-umbrella-beach' },
                   { id: 'karyawan', label: 'Master Karyawan', icon: 'fa-users' },
+                  { id: 'more_apps', label: 'Master More Apps', icon: 'fa-layer-group' },
                   { id: 'lokasi', label: 'Master Lokasi', icon: 'fa-map-pin' },
                   { id: 'shift', label: 'Master Shift', icon: 'fa-clock' },
                   { id: 'divisi', label: 'Master Divisi', icon: 'fa-layer-group' },
@@ -3880,6 +3958,10 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
               />
             )}
             
+            {activeModule === 'more_apps' && (
+              <MasterMoreAppsView karyawanList={karyawanList} moreAppsAccess={moreAppsAccess} setMoreAppsAccess={setMoreAppsAccess} moreAppsCatalog={moreAppsCatalog} setMoreAppsCatalog={setMoreAppsCatalog} showToast={showToast} />
+            )}
+
             {activeModule === 'harian' && (
               <div className="space-y-6">
                 <div className="flex flex-wrap justify-between items-center gap-4 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
@@ -4038,7 +4120,8 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                             const needsEvidenceButton = !!statusRecord && ['Sakit', 'Izin', 'Cuti'].includes(String(statusRecord.status || '').trim());
                             
                             return (
-                              <tr key={k.id} className="hover:bg-slate-50/50 transition">
+                              <tr key={k.id} className="transition hover:bg-slate-50/50">
+
                                 <td className="p-4 text-center font-mono-numbers text-slate-400 font-bold">{i + 1}</td>
                                 <td className="p-4">
                                   <div className="font-bold text-slate-800">{k.nama_lengkap || 'Nama belum diisi'}</div>
@@ -4513,6 +4596,87 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
             )}
 
           </main>
+        </div>
+      );
+    }
+
+    function MasterMoreAppsView({ karyawanList = [], moreAppsAccess = {}, setMoreAppsAccess, moreAppsCatalog = DEFAULT_MORE_APPS, setMoreAppsCatalog, showToast }) {
+      const appItems = (Array.isArray(moreAppsCatalog) ? moreAppsCatalog : DEFAULT_MORE_APPS).filter(app => app && typeof app === 'object' && typeof app.label === 'string' && app.label.trim());
+      const [showAppForm, setShowAppForm] = useState(false);
+      const [editingLabel, setEditingLabel] = useState('');
+      const [appForm, setAppForm] = useState({ label: '', description: '', icon: 'fa-layer-group' });
+      const [savingCatalog, setSavingCatalog] = useState(false);
+      const openNewApp = () => { setEditingLabel(''); setAppForm({ label: '', description: '', icon: 'fa-layer-group' }); setShowAppForm(true); };
+      const openEditApp = app => { setEditingLabel(app.label); setAppForm({ label: app.label, description: app.description || '', icon: app.icon || 'fa-layer-group' }); setShowAppForm(true); };
+      const saveApp = async () => {
+        const label = appForm.label.trim();
+        if (!label) { showToast('Masukkan nama aplikasi terlebih dahulu.', 'error'); return; }
+        if (appItems.some(a => a.label.toLowerCase() === label.toLowerCase() && a.label !== editingLabel)) { showToast('Nama aplikasi sudah digunakan.', 'error'); return; }
+        if (typeof setMoreAppsCatalog !== 'function') { showToast('Fungsi penyimpanan katalog belum tersedia.', 'error'); return; }
+        const palette = ['from-violet-50 to-purple-100|text-violet-700','from-sky-50 to-cyan-100|text-sky-700','from-amber-50 to-orange-100|text-amber-700','from-emerald-50 to-teal-100|text-emerald-700','from-fuchsia-50 to-pink-100|text-fuchsia-700'];
+        const [color, ink] = palette[appItems.length % palette.length].split('|');
+        const next = editingLabel
+          ? appItems.map(a => a.label === editingLabel ? { ...a, label, description: appForm.description.trim(), icon: appForm.icon.trim() || 'fa-layer-group' } : a)
+          : [...appItems, { label, description: appForm.description.trim(), icon: appForm.icon.trim() || 'fa-layer-group', color, ink }];
+        setSavingCatalog(true);
+        try {
+          await setMoreAppsCatalog(next);
+          if (editingLabel && editingLabel !== label) {
+            const nextAccess = { ...(moreAppsAccess || {}) };
+            nextAccess[label] = nextAccess[editingLabel] || [];
+            delete nextAccess[editingLabel];
+            await setMoreAppsAccess(nextAccess);
+          }
+          setSelectedApp(label); setShowAppForm(false);
+          showToast(editingLabel ? 'Aplikasi berhasil diperbarui.' : 'Aplikasi baru berhasil ditambahkan. Default akses kosong; setelah karyawan diberi akses, tombolnya menampilkan Coming Soon.');
+        } catch (e) { showToast(`Gagal menyimpan katalog aplikasi: ${e.message || 'Periksa izin Supabase.'}`, 'error'); }
+        finally { setSavingCatalog(false); }
+      };
+      const deleteApp = async app => {
+        if (!window.confirm(`Hapus aplikasi "${app.label}" dari More Apps?`)) return;
+        try {
+          await setMoreAppsCatalog(appItems.filter(a => a.label !== app.label));
+          const nextAccess = { ...(moreAppsAccess || {}) }; delete nextAccess[app.label];
+          await setMoreAppsAccess(nextAccess);
+          if (selectedApp === app.label) setSelectedApp((appItems.find(a => a.label !== app.label) || {}).label || '');
+          showToast('Aplikasi berhasil dihapus.');
+        } catch (e) { showToast(`Gagal menghapus aplikasi: ${e.message || 'Periksa izin Supabase.'}`, 'error'); }
+      };
+      const [selectedApp, setSelectedApp] = useState(appItems[0]?.label || '');
+      const [search, setSearch] = useState('');
+      const [draftIds, setDraftIds] = useState((moreAppsAccess?.[appItems[0]?.label] || []).map(String));
+      const [saving, setSaving] = useState(false);
+      useEffect(() => { setDraftIds((moreAppsAccess?.[selectedApp] || []).map(String)); }, [selectedApp, moreAppsAccess]);
+      const filtered = karyawanList.filter(k => `${k.nama_lengkap || ''} ${k.nik || ''} ${k.divisi || ''} ${k.jabatan || ''}`.toLowerCase().includes(search.toLowerCase()));
+      const setAll = checked => setDraftIds(checked ? karyawanList.map(k => String(k.id)) : []);
+      const save = async () => {
+        if (typeof setMoreAppsAccess !== 'function') { showToast('Fungsi penyimpanan pengaturan tidak tersedia.', 'error'); return; }
+        setSaving(true);
+        try {
+          const next = { ...(moreAppsAccess || {}), [selectedApp]: draftIds.map(String) };
+          await setMoreAppsAccess(next);
+          showToast(`Akses ${selectedApp} berhasil disimpan untuk ${draftIds.length} karyawan.`);
+        } catch (e) {
+          console.error('Gagal menyimpan akses More Apps:', e);
+          showToast(`Gagal menyimpan akses More Apps: ${e.message || 'Periksa koneksi dan izin tabel settings.'}`, 'error');
+        } finally { setSaving(false); }
+      };
+      return (
+        <div className="space-y-5">
+          <div className="rounded-3xl bg-gradient-to-r from-violet-600 to-fuchsia-600 p-6 text-white shadow-lg">
+            <div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-xl"><i className="fa-solid fa-layer-group"></i></div><div><h2 className="text-xl font-extrabold">Master More Apps</h2><p className="mt-1 text-xs text-white/80">Atur karyawan yang dapat melihat setiap menu di halaman More Apps.</p></div></div>
+          </div>
+          <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3"><div><h3 className="text-sm font-extrabold text-slate-800">Kelola Aplikasi</h3><p className="mt-1 text-xs text-slate-500">Tambah aplikasi baru, ubah nama, deskripsi, ikon, atau hapus aplikasi.</p></div><button type="button" onClick={openNewApp} className="rounded-full bg-violet-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-violet-700"><i className="fa-solid fa-plus mr-1.5"></i>Buat Aplikasi</button></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+              {appItems.map(app => <div key={app.label} className="flex items-center gap-3 rounded-2xl border border-slate-100 p-3"><div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${app.color || 'bg-violet-50'} ${app.ink || 'text-violet-700'}`}><i className={`fa-solid ${app.icon || 'fa-layer-group'}`}></i></div><div className="min-w-0 flex-1"><p className="truncate text-xs font-extrabold text-slate-800">{app.label}</p><p className="truncate text-[10px] text-slate-500">{app.description || 'Tanpa deskripsi'}</p></div><button title="Edit aplikasi" onClick={() => openEditApp(app)} className="h-8 w-8 rounded-lg text-violet-600 hover:bg-violet-50"><i className="fa-solid fa-pen"></i></button><button title="Hapus aplikasi" onClick={() => deleteApp(app)} className="h-8 w-8 rounded-lg text-rose-500 hover:bg-rose-50"><i className="fa-solid fa-trash"></i></button></div>)}
+            </div>
+          </section>
+          {showAppForm && <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><div><h3 className="text-lg font-extrabold text-slate-900">{editingLabel ? 'Edit Aplikasi' : 'Buat Aplikasi Baru'}</h3><p className="mt-1 text-xs text-slate-500">Tombol karyawan otomatis menggunakan popup Coming Soon.</p></div><button onClick={() => setShowAppForm(false)} className="h-9 w-9 rounded-full bg-slate-100 text-slate-500"><i className="fa-solid fa-xmark"></i></button></div><div className="space-y-4"><label className="block text-xs font-bold text-slate-600">Nama aplikasi<input value={appForm.label} onChange={e => setAppForm(v => ({...v,label:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-violet-400" placeholder="Contoh: Cek Promo" /></label><label className="block text-xs font-bold text-slate-600">Deskripsi aplikasi<textarea value={appForm.description} onChange={e => setAppForm(v => ({...v,description:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-violet-400" rows="2" placeholder="Jelaskan fungsi aplikasi" /></label><label className="block text-xs font-bold text-slate-600">Ikon Font Awesome<input value={appForm.icon} onChange={e => setAppForm(v => ({...v,icon:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-violet-400" placeholder="fa-layer-group" /><span className="mt-1 block text-[10px] text-slate-400">Masukkan nama kelas ikon, misalnya fa-box, fa-tags, atau fa-calculator.</span></label><div className="flex items-center gap-3 rounded-xl bg-violet-50 p-3 text-violet-700"><i className={`fa-solid ${appForm.icon || 'fa-layer-group'} text-xl`}></i><span className="text-xs font-bold">{appForm.label || 'Pratinjau ikon aplikasi'}</span></div><div className="flex gap-2 pt-2"><button type="button" disabled={savingCatalog} onClick={() => setShowAppForm(false)} className="flex-1 rounded-full bg-slate-100 py-3 text-xs font-bold text-slate-600">Batal</button><button type="button" disabled={savingCatalog} onClick={saveApp} className="flex-1 rounded-full bg-violet-600 py-3 text-xs font-bold text-white disabled:opacity-50">{savingCatalog ? 'Menyimpan...' : 'Simpan Aplikasi'}</button></div></div></div></div>}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(240px,0.8fr)_minmax(320px,1.2fr)]">
+            <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm"><h3 className="mb-3 text-sm font-extrabold text-slate-800">Pilih Menu / Aplikasi</h3><div className="space-y-2">{appItems.map(app => <button key={app.label} onClick={() => setSelectedApp(app.label)} className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${selectedApp === app.label ? 'border-violet-200 bg-violet-50 text-violet-800' : 'border-slate-100 hover:bg-slate-50 text-slate-600'}`}><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${selectedApp === app.label ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-500'}`}><i className={`fa-solid ${app.icon}`}></i></span><span className="min-w-0 flex-1"><span className="block text-xs font-extrabold">{app.label}</span><span className="mt-0.5 block text-[10px] text-slate-500">{app.description}</span></span><i className={`fa-solid fa-chevron-right text-[10px] ${selectedApp === app.label ? 'text-violet-500' : 'text-slate-300'}`}></i></button>)}</div></section>
+            <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm"><div className="border-b border-slate-100 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-extrabold text-slate-800">Daftar Karyawan</h3><p className="mt-1 text-xs text-slate-500">Akses untuk: <strong>{selectedApp}</strong></p></div><span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-extrabold text-violet-700">{draftIds.length} dipilih</span></div><div className="mt-4"><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama, NIK, divisi..." className="w-full rounded-xl border border-slate-200 px-4 py-3 text-xs outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" /></div><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => setAll(true)} className="rounded-full border border-violet-200 bg-violet-50 px-3 py-2 text-[11px] font-bold text-violet-700 hover:bg-violet-100"><i className="fa-solid fa-check-double mr-1"></i>Select All</button><button type="button" onClick={() => setAll(false)} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50"><i className="fa-solid fa-xmark mr-1"></i>Unselect All</button></div></div><div className="max-h-[52vh] overflow-y-auto p-3">{filtered.map(k => { const checked = draftIds.includes(String(k.id)); return <label key={k.id} className={`mb-1 flex cursor-pointer items-center gap-3 rounded-xl p-3 transition ${checked ? 'bg-violet-50' : 'hover:bg-slate-50'}`}><input type="checkbox" checked={checked} onChange={e => setDraftIds(prev => e.target.checked ? [...new Set([...prev, String(k.id)])] : prev.filter(id => id !== String(k.id)))} className="h-4 w-4 accent-violet-600"/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-slate-800">{k.nama_lengkap || 'Tanpa nama'}</span><span className="mt-0.5 block truncate text-[10px] text-slate-500">{[k.nik, k.divisi, k.jabatan].filter(Boolean).join(' • ') || 'Data karyawan'}</span></span></label>; })}{filtered.length === 0 && <p className="p-6 text-center text-xs text-slate-400">Karyawan tidak ditemukan.</p>}</div><div className="border-t border-slate-100 bg-slate-50 p-4"><button disabled={saving} onClick={save} className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-xs font-extrabold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-60"><i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}></i>{saving ? 'Menyimpan...' : 'Simpan Pengaturan Akses'}</button></div></section>
+          </div>
         </div>
       );
     }
@@ -5602,8 +5766,23 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
         return () => { active = false; };
       }, []);
 
-      // Urutkan A-Z berdasarkan nama lengkap
-      const sortedKaryawanList = [...(Array.isArray(karyawanList) ? karyawanList : [])].filter(Boolean).sort((a, b) => String(a?.nama_lengkap || '').localeCompare(String(b?.nama_lengkap || ''), 'id')); 
+      // Urutkan A-Z dan tandai karyawan yang datanya belum lengkap.
+      // Field opsional yang tidak memengaruhi status: NIK, foto profil, dan jalan/alamat detail.
+      const getAlamatKaryawan = (k) => {
+        try { return typeof k?.alamat === 'string' ? JSON.parse(k.alamat || '{}') : (k?.alamat || {}); }
+        catch (_) { return {}; }
+      };
+      const isKaryawanDataIncomplete = (k) => {
+        const alamatKaryawan = getAlamatKaryawan(k);
+        const requiredValues = [
+          k?.nama_lengkap, k?.tgl_lahir, k?.username, k?.password,
+          k?.no_wa, k?.email, k?.divisi, k?.jabatan,
+          alamatKaryawan?.provinsi, alamatKaryawan?.kota,
+          alamatKaryawan?.kecamatan, alamatKaryawan?.desa || alamatKaryawan?.kelurahan
+        ];
+        return requiredValues.some(value => value === null || value === undefined || String(value).trim() === '');
+      };
+      const sortedKaryawanList = [...(Array.isArray(karyawanList) ? karyawanList : [])].filter(Boolean).sort((a, b) => String(a?.nama_lengkap || '').localeCompare(String(b?.nama_lengkap || ''), 'id'));
 
       const availableJabatan = useMemo(() => {
         if (!form.divisi) return jabatanList;
@@ -5786,7 +5965,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {sortedKaryawanList.map((k, i) => (
-                  <tr key={k.id} className="hover:bg-slate-50/50 transition">
+                  <tr key={k.id} title={isKaryawanDataIncomplete(k) ? 'Data karyawan belum lengkap. Lengkapi data wajib melalui tombol Edit.' : 'Data karyawan lengkap'} className={`transition ${isKaryawanDataIncomplete(k) ? 'bg-rose-500/[0.09] backdrop-blur-sm border-l-4 border-rose-400 hover:bg-rose-500/[0.15]' : 'hover:bg-slate-50/50'}`}>
                     <td className="p-4 text-center font-mono-numbers text-slate-400 font-bold">{i + 1}</td>
                     
                     {/* Kolom Preview Foto Profil di antara Nomor dan Nama Lengkap */}
