@@ -1230,10 +1230,40 @@
       const [showWizardModal, setShowWizardModal] = useState(false);
       const [wizardType, setWizardType] = useState('masuk'); 
       const [showCutiLockModal, setShowCutiLockModal] = useState(false);
+      const [showLiburConfirmModal, setShowLiburConfirmModal] = useState(false);
       const [showSimpleFormModal, setShowSimpleFormModal] = useState(null); 
       const [filterStatusRiwayat, setFilterStatusRiwayat] = useState('Semua');
       const [cutoffFilter, setCutoffFilter] = useState('Semua');
       const [showComingSoonApp, setShowComingSoonApp] = useState('');
+
+      // Ambil ulang data master karyawan dari Supabase agar perubahan jatah oleh HR langsung tercermin,
+      // tanpa perlu menghapus cookie atau data situs.
+      useEffect(() => {
+        let active = true;
+        const refreshEmployeeMaster = async () => {
+          try {
+            const client = await getSupabaseClient();
+            if (!client || !currentUser?.id) return;
+            const { data, error } = await client.from('master_karyawan')
+              .select('*').eq('id', currentUser.id).maybeSingle();
+            if (error) throw error;
+            if (active && data) {
+              setCurrentUser(prev => ({ ...prev, ...data }));
+              if (typeof setKaryawanList === 'function') {
+                setKaryawanList(prev => (Array.isArray(prev) ? prev : []).map(k =>
+                  String(k.id) === String(data.id) ? { ...k, ...data } : k
+                ));
+              }
+              try { localStorage.setItem('suryatokoku_user', JSON.stringify({ ...currentUser, ...data })); } catch (_) {}
+            }
+          } catch (err) { console.warn('Gagal menyegarkan data master karyawan:', err); }
+        };
+        refreshEmployeeMaster();
+        const onFocus = () => refreshEmployeeMaster();
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('pageshow', onFocus);
+        return () => { active = false; window.removeEventListener('focus', onFocus); window.removeEventListener('pageshow', onFocus); };
+      }, [currentUser?.id]);
 
       useEffect(() => {
         const timer = setInterval(() => setClock(new Date()), 1000);
@@ -1392,7 +1422,15 @@
           return;
         }
         if (type === 'libur') {
-          handleMarkLibur();
+          if (todayAttendanceMasuk || todayAttendanceKeluar) {
+            showToast('Presensi hari ini sudah tercatat. Hubungi admin jika perlu koreksi.', 'error');
+            return;
+          }
+          if (sisaLiburAktif <= 0) {
+            showToast('Jatah libur sudah habis. Silakan gunakan Izin jika diperlukan.', 'info');
+            return;
+          }
+          setShowLiburConfirmModal(true);
           return;
         }
         if (type === 'cuti' && !allowCuti) {
@@ -1800,7 +1838,7 @@
               <div>
                 <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Layanan Cepat</h3>
                 <div className="grid grid-cols-4 gap-3">
-                  <button onClick={() => handleActionClick('sakit')} disabled={todayHasStatusAction} title={todayHasStatusAction ? `Hari ini sudah tercatat ${todaySpecialStatusRecord.status}` : 'Ajukan sakit'} className="flex flex-col items-center justify-center text-center active:scale-95 transition group disabled:opacity-50 disabled:cursor-not-allowed">
+                  <button onClick={() => handleActionClick('sakit')} disabled={todayHasStatusAction || !!todayAttendanceMasuk || !!todayAttendanceKeluar} title={(todayAttendanceMasuk || todayAttendanceKeluar) ? 'Presensi masuk/pulang sudah tercatat hari ini' : todayHasStatusAction ? `Hari ini sudah tercatat ${todaySpecialStatusRecord.status}` : 'Ajukan sakit'} className="flex flex-col items-center justify-center text-center active:scale-95 transition group disabled:opacity-50 disabled:cursor-not-allowed">
                     <div className="w-14 h-14 rounded-[1.25rem] bg-white border border-slate-100 shadow-[0_8px_20px_rgb(0,0,0,0.03)] text-amber-500 flex items-center justify-center mb-2 group-hover:bg-amber-50 transition">
                       <i className="fa-solid fa-file-medical text-xl"></i>
                     </div>
@@ -1815,7 +1853,7 @@
                       <span className="text-[11px] font-semibold text-slate-600">Libur</span>
                     </button>
                   ) : (
-                    <button onClick={() => handleActionClick('izin')} disabled={todayHasStatusAction} title={todayHasStatusAction ? `Hari ini sudah tercatat ${todaySpecialStatusRecord.status}` : 'Ajukan izin'} className="flex flex-col items-center justify-center text-center active:scale-95 transition group disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button onClick={() => handleActionClick('izin')} disabled={todayHasStatusAction || !!todayAttendanceMasuk || !!todayAttendanceKeluar} title={(todayAttendanceMasuk || todayAttendanceKeluar) ? 'Presensi masuk/pulang sudah tercatat hari ini' : todayHasStatusAction ? `Hari ini sudah tercatat ${todaySpecialStatusRecord.status}` : 'Ajukan izin'} className="flex flex-col items-center justify-center text-center active:scale-95 transition group disabled:opacity-50 disabled:cursor-not-allowed">
                       <div className="w-14 h-14 rounded-[1.25rem] bg-white border border-slate-100 shadow-[0_8px_20px_rgb(0,0,0,0.03)] text-orange-500 flex items-center justify-center mb-2 group-hover:bg-orange-50 transition">
                         <i className="fa-solid fa-hand text-xl"></i>
                       </div>
@@ -1823,7 +1861,7 @@
                     </button>
                   )}
 
-                  <button onClick={() => handleActionClick('cuti')} disabled={todayHasStatusAction} title={todayHasStatusAction ? `Hari ini sudah tercatat ${todaySpecialStatusRecord.status}` : 'Ajukan cuti'} className="flex flex-col items-center justify-center text-center active:scale-95 transition group disabled:opacity-50 disabled:cursor-not-allowed">
+                  <button onClick={() => handleActionClick('cuti')} disabled={todayHasStatusAction || !!todayAttendanceMasuk || !!todayAttendanceKeluar} title={(todayAttendanceMasuk || todayAttendanceKeluar) ? 'Presensi masuk/pulang sudah tercatat hari ini' : todayHasStatusAction ? `Hari ini sudah tercatat ${todaySpecialStatusRecord.status}` : 'Ajukan cuti'} className="flex flex-col items-center justify-center text-center active:scale-95 transition group disabled:opacity-50 disabled:cursor-not-allowed">
                     <div className="w-14 h-14 rounded-[1.25rem] bg-white border border-slate-100 shadow-[0_8px_20px_rgb(0,0,0,0.03)] text-purple-500 flex items-center justify-center mb-2 group-hover:bg-purple-50 transition">
                       <i className="fa-solid fa-calendar-check text-xl"></i>
                     </div>
@@ -2075,6 +2113,22 @@
                 showToast(`Presensi ${wizardType.toUpperCase()} berhasil dikirim!`);
               }}
             />
+          )}
+
+          {/* Konfirmasi dua langkah untuk mencatat Libur */}
+          {showLiburConfirmModal && (
+            <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-md z-[70] flex items-center justify-center p-4">
+              <div className="bg-white rounded-[2rem] max-w-sm w-full p-6 shadow-2xl border border-slate-100">
+                <div className="w-16 h-16 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-calendar-check text-2xl"></i></div>
+                <h3 className="font-display font-bold text-lg text-slate-900 text-center">Konfirmasi Libur</h3>
+                <p className="text-xs text-slate-500 text-center leading-relaxed mt-2">Anda akan menggunakan 1 hari dari jatah libur. Setelah disimpan, status hari ini tidak dapat diubah melalui aplikasi.</p>
+                <div className="my-4 rounded-2xl bg-sky-50 border border-sky-100 p-3 text-center"><p className="text-[10px] uppercase tracking-wide text-sky-700 font-bold">Sisa jatah libur</p><p className="text-2xl font-extrabold text-sky-800">{sisaLiburAktif} hari</p></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => setShowLiburConfirmModal(false)} className="py-3 rounded-full border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50">Batal</button>
+                  <button type="button" onClick={async () => { setShowLiburConfirmModal(false); await handleMarkLibur(); }} className="py-3 rounded-full bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-lg shadow-sky-200">Ya, Konfirmasi Libur</button>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Modal Cuti Terkunci */}
@@ -2723,7 +2777,7 @@
 
     function SimpleActionModal({ type, currentUser, setCurrentUser, onClose, onSubmitAttendance, onSubmitLembur }) {
       const [keterangan, setKeterangan] = useState('');
-      const [durasiJam, setDurasiJam] = useState(2);
+      const [durasiJam, setDurasiJam] = useState('');
       const [fotoBukti, setFotoBukti] = useState('');
       const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -2757,13 +2811,19 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
         }
 
         if (type === 'lembur') {
+          const durasiValid = Number(durasiJam);
+          if (!durasiJam || !Number.isFinite(durasiValid) || durasiValid < 1 || durasiValid > 12) {
+            setIsSubmitting(false);
+            alert('Isi durasi lembur terlebih dahulu (1–12 jam).');
+            return;
+          }
           const newLembur = {
             id: 'lmb-' + Date.now(),
             karyawan_id: currentUser.id,
             karyawan_nama: currentUser.nama_lengkap,
             divisi: currentUser.divisi,
             tanggal: dateStr,
-            durasi_jam: durasiJam,
+            durasi_jam: durasiValid,
             keterangan: keterangan || 'Lembur',
             bukti_url: uploadedBuktiUrl,
             status: 'Pending',
@@ -2833,7 +2893,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
             </div>
             <div className="space-y-4">
               {type === 'lembur' && (
-                <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Durasi (Jam)</label><input type="number" min="1" max="12" value={durasiJam} onChange={(e) => setDurasiJam(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none" /></div>
+                <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Durasi (Jam)</label><input type="number" min="1" max="12" value={durasiJam} placeholder="Masukkan durasi jam" onChange={(e) => setDurasiJam(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none" /></div>
               )}
               <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Keterangan Lengkap</label><textarea rows="3" value={keterangan} onChange={(e) => setKeterangan(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 outline-none"></textarea></div>
               <div>
@@ -2841,7 +2901,6 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                 <input
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   onChange={(e) => {
                     const file = e.target.files && e.target.files[0];
                     if (!file) return;
