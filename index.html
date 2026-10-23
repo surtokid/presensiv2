@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>App SuryaKuCan</title>
+  <title>SuryaKuCan</title>
   <link rel="icon" type="image/png" href="./Logo%20SuryaKuCan.png">
   <link rel="apple-touch-icon" href="./Logo%20SuryaKuCan.png">
-  <link rel="manifest" href="./manifest.json?v=app-surtok-v2">
+  <link rel="manifest" href="./manifest.json?v=suryakucan-v3">
   <meta name="theme-color" content="#ec4899">
-  <meta name="application-name" content="App SuryaKuCan">
+  <meta name="application-name" content="SuryaKuCan">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="App SuryaKuCan">
+  <meta name="apple-mobile-web-app-title" content="SuryaKuCan">
   
   <!-- Google Fonts: Plus Jakarta Sans & Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -396,6 +396,7 @@
       const [adminList, setAdminList] = useState([]);
       const [isAdminTableEmpty, setIsAdminTableEmpty] = useState(false);
       const [toleransiMenit, setToleransiMenit] = useState(15);
+      const [pendaftaranKaryawanAktif, setPendaftaranKaryawanAktif] = useState(false);
         
       const [presensiList, setPresensiList] = useState([]);
       const [isPresensiReady, setIsPresensiReady] = useState(false);
@@ -424,13 +425,13 @@
               client.from('presensi').select('*').order('created_at', { ascending: false }),
               client.from('pengajuan_lembur').select('*').order('created_at', { ascending: false }),
               client.from('klaim_kehadiran').select('*'),
-              client.from('settings').select('value').eq('key', 'toleransi_menit').maybeSingle()
+              client.from('settings').select('key,value').in('key', ['toleransi_menit', 'pendaftaran_karyawan_aktif'])
             ]);
 
             if (!isMounted) return;
             const [
               kryRes, lokRes, divRes, jabRes, shRes, admRes,
-              pgmRes, prsRes, lmbRes, klmRes, toleransiRes
+              pgmRes, prsRes, lmbRes, klmRes, settingsRes
             ] = results;
 
             const assignIfOk = (result, setter, label) => {
@@ -463,11 +464,17 @@
             assignIfOk(lmbRes, setLemburList, 'pengajuan_lembur');
             assignIfOk(klmRes, setKlaimList, 'klaim_kehadiran');
 
-            if (toleransiRes.error) {
-              console.warn('Gagal memuat settings toleransi:', toleransiRes.error.message);
-            } else if (toleransiRes.data?.value != null && toleransiRes.data.value !== '') {
-              const value = Number(toleransiRes.data.value);
-              if (Number.isFinite(value)) setToleransiMenit(value);
+            if (settingsRes.error) {
+              console.warn('Gagal memuat pengaturan aplikasi:', settingsRes.error.message);
+            } else {
+              const settingsRows = settingsRes.data || [];
+              const toleransiSetting = settingsRows.find(x => x.key === 'toleransi_menit');
+              const pendaftaranSetting = settingsRows.find(x => x.key === 'pendaftaran_karyawan_aktif');
+              if (toleransiSetting?.value != null && toleransiSetting.value !== '') {
+                const value = Number(toleransiSetting.value);
+                if (Number.isFinite(value)) setToleransiMenit(value);
+              }
+              setPendaftaranKaryawanAktif(String(pendaftaranSetting?.value || 'false').toLowerCase() === 'true');
             }
           } catch (err) {
             console.error('Gagal menginisialisasi/memuat Supabase:', err);
@@ -600,6 +607,18 @@
       return value;
     };
 
+    const setPendaftaranKaryawanAktifSynced = async (enabled) => {
+      const value = Boolean(enabled);
+      const client = await getSupabaseClient();
+      const { error } = await client.from('settings').upsert(
+        { key: 'pendaftaran_karyawan_aktif', value: value ? 'true' : 'false' },
+        { onConflict: 'key' }
+      );
+      if (error) throw error;
+      setPendaftaranKaryawanAktif(value);
+      return value;
+    };
+
     useEffect(() => {
       const handleHashChange = () => {
         setCurrentRoute(window.location.hash || '#karyawan');
@@ -700,7 +719,7 @@
     return (
       <div className="min-h-screen flex flex-col justify-between">
         {/* Top Navigation Bar: Ditampilkan kembali */}
-        <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
+        <header className="hidden bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
           {/* Brand Logo */}
           <div 
             onClick={() => navigateTo(isDashboardRoute ? '#dashboard' : '#karyawan')}
@@ -775,7 +794,9 @@
 
         {/* Main Content: Render portal aktif atau form login yang sesuai */}
         <main className="flex-1 relative z-10">
-          {isDashboardRoute ? (
+          {currentRoute === '#daftar-karyawan' ? (
+            <PendaftaranKaryawanPublik aktif={pendaftaranKaryawanAktif} navigateTo={navigateTo} showToast={showToast} />
+          ) : isDashboardRoute ? (
             /* Rute #dashboard */
             isAdminAuthenticated ? (
               <AdminDashboard 
@@ -801,6 +822,8 @@
                 setKlaimList={setKlaimListSynced}
                 toleransiMenit={toleransiMenit}
                 setToleransiMenit={setToleransiMenitSynced}
+                pendaftaranKaryawanAktif={pendaftaranKaryawanAktif}
+                setPendaftaranKaryawanAktif={setPendaftaranKaryawanAktifSynced}
                 showToast={showToast}
                 handleLogout={handleLogout}
               />
@@ -814,6 +837,7 @@
                 onLoginAdmin={handleLoginAdmin}
                 showToast={showToast}
                 navigateTo={navigateTo}
+                pendaftaranKaryawanAktif={pendaftaranKaryawanAktif}
               />
             )
           ) : (
@@ -851,6 +875,7 @@
                 onLoginAdmin={handleLoginAdmin}
                 showToast={showToast}
                 navigateTo={navigateTo}
+                pendaftaranKaryawanAktif={pendaftaranKaryawanAktif}
               />
             )
           )}
@@ -900,13 +925,90 @@
   }
 
   /* =========================================================
+     FORM PENDAFTARAN KARYAWAN PUBLIK
+     URL: #daftar-karyawan. Kolom master dikelola HRD.
+     ========================================================= */
+  function PendaftaranKaryawanPublik({ aktif, navigateTo, showToast }) {
+    const [form, setForm] = useState({ nama_lengkap: '', tgl_lahir: '', no_wa: '', username: '', password: '', email: '', provinsi: '', kota: '', kecamatan: '', desa: '', jalan: '', foto_profil: '' });
+    const [busy, setBusy] = useState(false);
+    const [provinceOptions, setProvinceOptions] = useState([]);
+    const [regencyOptions, setRegencyOptions] = useState([]);
+    const [districtOptions, setDistrictOptions] = useState([]);
+    const [villageOptions, setVillageOptions] = useState([]);
+    const [provinceId, setProvinceId] = useState('');
+    const [regencyId, setRegencyId] = useState('');
+    const [districtId, setDistrictId] = useState('');
+    const [villageId, setVillageId] = useState('');
+    const [wilayahLoading, setWilayahLoading] = useState(false);
+    const [wilayahError, setWilayahError] = useState('');
+    const WILAYAH_API = 'https://www.emsifa.com/api-wilayah-indonesia/api';
+    const fetchWilayah = async path => { const r = await fetch(`${WILAYAH_API}/${path}.json`); if (!r.ok) throw new Error('Data wilayah tidak dapat dimuat. Periksa koneksi internet.'); return r.json(); };
+    useEffect(() => { let alive = true; fetchWilayah('provinces').then(x => { if (alive) setProvinceOptions(x); }).catch(e => { if (alive) setWilayahError(e.message); }); return () => { alive = false; }; }, []);
+    const formatDateInput = value => { const d = String(value || '').replace(/\D/g, '').slice(0, 8); return d.length <= 2 ? d : d.length <= 4 ? `${d.slice(0,2)}/${d.slice(2)}` : `${d.slice(0,2)}/${d.slice(2,4)}/${d.slice(4)}`; };
+    const toIsoDate = value => { const m = String(value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if (!m) return ''; const [,dd,mm,yyyy]=m; const d=new Date(+yyyy,+mm-1,+dd); return d.getFullYear()===+yyyy && d.getMonth()===+mm-1 && d.getDate()===+dd ? `${yyyy}-${mm}-${dd}` : ''; };
+    const updateWilayah = async (level, id) => {
+      setWilayahError(''); setWilayahLoading(true);
+      try {
+        if (level === 'province') { const item=provinceOptions.find(x=>x.id===id); setProvinceId(id); setRegencyId(''); setDistrictId(''); setVillageId(''); setRegencyOptions([]); setDistrictOptions([]); setVillageOptions([]); setForm(p=>({...p,provinsi:item?.name||'',kota:'',kecamatan:'',desa:''})); if(id) setRegencyOptions(await fetchWilayah(`regencies/${id}`)); }
+        if (level === 'regency') { const item=regencyOptions.find(x=>x.id===id); setRegencyId(id); setDistrictId(''); setVillageId(''); setDistrictOptions([]); setVillageOptions([]); setForm(p=>({...p,kota:item?.name||'',kecamatan:'',desa:''})); if(id) setDistrictOptions(await fetchWilayah(`districts/${id}`)); }
+        if (level === 'district') { const item=districtOptions.find(x=>x.id===id); setDistrictId(id); setVillageId(''); setVillageOptions([]); setForm(p=>({...p,kecamatan:item?.name||'',desa:''})); if(id) setVillageOptions(await fetchWilayah(`villages/${id}`)); }
+        if (level === 'village') { const item=villageOptions.find(x=>x.id===id); setVillageId(id); setForm(p=>({...p,desa:item?.name||''})); }
+      } catch(e) { setWilayahError(e.message || 'Gagal memuat wilayah.'); } finally { setWilayahLoading(false); }
+    };
+    const handleSubmit = async e => {
+      e.preventDefault();
+      if (!aktif) { showToast('Silakan hubungi HRD terlebih dahulu.', 'info'); navigateTo('#karyawan'); return; }
+      const tgl = toIsoDate(form.tgl_lahir); const wa=String(form.no_wa||'').trim();
+      if (!tgl) return showToast('Tanggal lahir harus menggunakan format dd/mm/yyyy.', 'error');
+      if (!/^08\d{8,13}$/.test(wa)) return showToast('Nomor WhatsApp harus diawali 08 dan berisi 10–15 digit.', 'error');
+      if (!form.provinsi || !form.kota || !form.kecamatan || !form.desa) return showToast('Lengkapi provinsi, kabupaten/kota, kecamatan, dan desa/kelurahan.', 'error');
+      setBusy(true);
+      try {
+        const client = await getSupabaseClient();
+        const { data: existing, error: checkError } = await client.from('master_karyawan').select('id,username,no_wa,email').or(`username.eq.${form.username.trim()},no_wa.eq.${wa},email.eq.${form.email.trim()}`).limit(1);
+        if (checkError) throw checkError;
+        if ((existing || []).length) throw new Error('Username, nomor WhatsApp, atau email sudah terdaftar.');
+        let foto = '';
+        if (form.foto_profil.startsWith('data:image')) {
+          foto = await uploadToGoogleDriveViaGAS(form.foto_profil, `profil_daftar_${Date.now()}.jpg`, 'profil');
+          if (!foto || foto.startsWith('data:image')) throw new Error('Foto profil gagal diunggah. Silakan coba lagi atau hapus foto lalu kirim ulang.');
+        }
+        const row = {
+          id: 'kry-' + Date.now(), nama_lengkap: form.nama_lengkap.trim(), tgl_lahir: tgl,
+          no_wa: wa, username: form.username.trim(), password: form.password, email: form.email.trim(),
+          alamat: JSON.stringify({provinsi:form.provinsi,kota:form.kota,kecamatan:form.kecamatan,desa:form.desa,jalan:form.jalan}),
+          foto_profil: foto, nik: null, lokasi_absen: [], divisi: '', jabatan: '', shifts: [], sisa_libur: 4, sisa_cuti: 0
+        };
+        const { error } = await client.from('master_karyawan').insert(row);
+        if (error) throw error;
+        showToast('Pendaftaran berhasil dikirim. Silakan hubungi HRD untuk penempatan divisi, jabatan, dan lokasi absen.', 'success');
+        navigateTo('#karyawan');
+      } catch(err) { console.error('Pendaftaran karyawan gagal:', err); showToast(`Pendaftaran gagal: ${err.message || 'periksa koneksi dan izin Supabase.'}`, 'error'); }
+      finally { setBusy(false); }
+    };
+    if (!aktif) return <div className="min-h-[calc(100vh-60px)] flex items-center justify-center p-5"><div className="max-w-md w-full bg-white rounded-[2rem] border border-slate-100 shadow-xl p-8 text-center"><div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-lock text-2xl"></i></div><h2 className="font-display font-extrabold text-xl text-slate-800">Pendaftaran Belum Dibuka</h2><p className="text-sm text-slate-500 mt-2">Silakan hubungi HRD terlebih dahulu.</p><button onClick={()=>navigateTo('#karyawan')} className="mt-6 w-full py-3 rounded-2xl bg-violet-600 text-white font-bold text-sm">Kembali ke Login</button></div></div>;
+    return <div className="min-h-[calc(100vh-60px)] flex items-center justify-center p-4 sm:p-6"><div className="max-w-xl w-full bg-white/95 rounded-[2rem] p-6 sm:p-8 border border-slate-100 shadow-xl"><div className="text-center mb-6"><img src="Logo SuryaKuCan.png" alt="Logo SuryaKuCan" className="w-16 h-16 object-contain mx-auto mb-3"/><h2 className="font-display font-extrabold text-2xl text-slate-800">Pendaftaran Karyawan</h2><p className="text-xs text-slate-500 mt-2">Isi data berikut dengan benar. Data penempatan akan dilengkapi oleh HRD.</p></div>
+      <form onSubmit={handleSubmit} className="space-y-3"><div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-2xl"><div className="w-12 h-12 rounded-full bg-white border border-slate-200 overflow-hidden flex items-center justify-center">{form.foto_profil ? <img src={form.foto_profil} alt="Foto profil" className="w-full h-full object-cover"/> : <i className="fa-solid fa-user text-slate-300"/>}</div><div className="flex-1"><label className="text-[10px] font-bold text-slate-500 block mb-1">Foto Profil (opsional)</label><input type="file" accept="image/*" onChange={e=>{const f=e.target.files?.[0]; if(!f)return; const reader=new FileReader(); reader.onloadend=()=>setForm(p=>({...p,foto_profil:String(reader.result||'')})); reader.readAsDataURL(f);}} className="w-full text-[11px]"/></div></div>
+      <input required maxLength={120} placeholder="Nama Lengkap" value={form.nama_lengkap} onChange={e=>setForm(p=>({...p,nama_lengkap:e.target.value}))} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3.5 font-bold outline-none"/>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="text-[10px] text-slate-500 font-bold block mb-1 ml-1">Tanggal Lahir</label><input required placeholder="dd/mm/yyyy" inputMode="numeric" maxLength={10} pattern="\d{2}/\d{2}/\d{4}" value={form.tgl_lahir} onChange={e=>setForm(p=>({...p,tgl_lahir:formatDateInput(e.target.value)}))} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3.5 font-bold outline-none"/></div><div><label className="text-[10px] text-slate-500 font-bold block mb-1 ml-1">No. WhatsApp</label><input required placeholder="08xxxxxxxxxx" inputMode="numeric" value={form.no_wa} onChange={e=>setForm(p=>({...p,no_wa:e.target.value.replace(/\D/g,'').slice(0,15)}))} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3.5 font-bold outline-none"/></div></div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><input required placeholder="Username" autoComplete="username" value={form.username} onChange={e=>setForm(p=>({...p,username:e.target.value.trimStart()}))} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3.5 font-bold outline-none"/><input required type="password" minLength={6} autoComplete="new-password" placeholder="Password (min. 6 karakter)" value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3.5 font-bold outline-none"/></div>
+      <input required type="email" placeholder="Alamat Email" value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value.trimStart()}))} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3.5 font-bold outline-none"/>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><select required value={provinceId} onChange={e=>updateWilayah('province',e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold"><option value="">Pilih Provinsi</option>{provinceOptions.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select><select required disabled={!provinceId||wilayahLoading} value={regencyId} onChange={e=>updateWilayah('regency',e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold"><option value="">Pilih Kabupaten/Kota</option>{regencyOptions.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select><select required disabled={!regencyId||wilayahLoading} value={districtId} onChange={e=>updateWilayah('district',e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold"><option value="">Pilih Kecamatan</option>{districtOptions.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select><select required disabled={!districtId||wilayahLoading} value={villageId} onChange={e=>updateWilayah('village',e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold"><option value="">Pilih Desa/Kelurahan</option>{villageOptions.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
+      <textarea rows={2} placeholder="Alamat jalan / nomor rumah (opsional)" value={form.jalan} onChange={e=>setForm(p=>({...p,jalan:e.target.value}))} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3.5 font-bold outline-none resize-y"/>
+      {wilayahLoading&&<p className="text-[10px] text-violet-600">Memuat data wilayah...</p>}{wilayahError&&<p className="text-[10px] text-rose-600">{wilayahError}</p>}
+      <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-[10px] text-amber-800">Nomor induk karyawan, lokasi absen, divisi, dan jabatan akan diisi atau diperbarui oleh HRD.</div>
+      <button disabled={busy} type="submit" className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white text-xs font-bold shadow-lg disabled:opacity-60">{busy?<><i className="fa-solid fa-spinner fa-spin mr-2"/>Mengirim Pendaftaran...</>:<><i className="fa-solid fa-paper-plane mr-2"/>Kirim Pendaftaran</>}</button><button type="button" onClick={()=>navigateTo('#karyawan')} className="w-full py-3 rounded-2xl border border-slate-200 text-slate-600 text-xs font-bold">Kembali ke Login</button></form></div></div>;
+  }
+
+  /* =========================================================
      KOMPONEN HALAMAN LOGIN (PORTAL KARYAWAN & ADMIN HRD)
      ========================================================= */
-  function AuthPortalView({ forcedRole = 'karyawan', karyawanList, adminList, onLoginKaryawan, onLoginAdmin, showToast, navigateTo }) {
+  function AuthPortalView({ forcedRole = 'karyawan', karyawanList, adminList, onLoginKaryawan, onLoginAdmin, showToast, navigateTo, pendaftaranKaryawanAktif = false }) {
     const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [showRegistrationClosedModal, setShowRegistrationClosedModal] = useState(false);
 
     const loginRole = forcedRole;
 
@@ -949,7 +1051,7 @@
               {loginRole === 'admin' ? 'Login Administrator HR' : 'Login Portal Karyawan'}
             </div>
             <h2 className="font-display font-extrabold text-2xl text-slate-800 tracking-tight">
-              {loginRole === 'admin' ? 'WORKSPACE HRD' : 'SURYATOKOKU'}
+              {loginRole === 'admin' ? 'WORKSPACE HRD' : 'SURYAKUCAN'}
             </h2>
             <p className="text-xs text-slate-500 font-medium mt-1">
               {loginRole === 'admin' 
@@ -969,7 +1071,7 @@
                 <input 
                   type="text" 
                   required
-                  placeholder={loginRole === 'karyawan' ? "budi atau 081234567890" : "admin atau hrd@suryatokoku.com"}
+                  placeholder={loginRole === 'karyawan' ? "Awil atau 081234567890" : "admin atau hrd@suryatokoku.com"}
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl pl-10 pr-4 py-3.5 font-bold text-slate-700 outline-none focus:border-violet-500 focus:bg-white transition"
@@ -980,7 +1082,30 @@
             <div>
               <div className="flex justify-between items-center mb-1.5 ml-1">
                 <label className="text-[11px] font-bold text-slate-500">Kata Sandi</label>
-                <span className="text-[10px] text-violet-600 font-semibold cursor-pointer" onClick={() => showToast('Gunakan password demo: 123', 'info')}>
+                <span
+                  className="text-[10px] text-violet-600 font-semibold cursor-pointer hover:text-violet-800 transition"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    if (loginRole === 'karyawan') {
+                      const pesan = 'Permisi Bu.. App presensi aku lupa kata sandi nya, mohon bantu reset ya bu 🙏';
+                      window.open(`https://wa.me/6285324667155?text=${encodeURIComponent(pesan)}`, '_blank', 'noopener,noreferrer');
+                    } else {
+                      showToast('Silakan hubungi administrator untuk reset kata sandi.', 'info');
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      if (loginRole === 'karyawan') {
+                        const pesan = 'Permisi Bu.. App presensi aku lupa kata sandi nya, mohon bantu reset ya bu 🙏';
+                        window.open(`https://wa.me/6285324667155?text=${encodeURIComponent(pesan)}`, '_blank', 'noopener,noreferrer');
+                      } else {
+                        showToast('Silakan hubungi administrator untuk reset kata sandi.', 'info');
+                      }
+                    }
+                  }}
+                >
                   Lupa Sandi?
                 </span>
               </div>
@@ -1027,6 +1152,50 @@
             </button>
           </form>
 
+          {loginRole === 'karyawan' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (pendaftaranKaryawanAktif) navigateTo('#daftar-karyawan');
+                else setShowRegistrationClosedModal(true);
+              }}
+              className="w-full mt-3 py-3.5 px-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition active:scale-95 flex items-center justify-center gap-2"
+            >
+              <i className="fa-solid fa-user-plus text-sm"></i>
+              <span>Daftar Karyawan</span>
+            </button>
+          )}
+
+          {loginRole === 'karyawan' && showRegistrationClosedModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/45 backdrop-blur-sm" onClick={() => setShowRegistrationClosedModal(false)}>
+              <div className="w-full max-w-sm rounded-[2rem] bg-white p-6 sm:p-7 shadow-2xl border border-white/80 animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-100 to-fuchsia-100 text-violet-600 flex items-center justify-center mx-auto mb-4 shadow-inner"><i className="fa-solid fa-user-lock text-2xl"></i></div>
+                <div className="text-center">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-[10px] font-extrabold tracking-wide mb-3"><i className="fa-solid fa-circle-info"></i> PENDAFTARAN DITUTUP</span>
+                  <h3 className="font-display font-extrabold text-xl text-slate-800">Pendaftaran Belum Dibuka</h3>
+                  <p className="text-sm leading-relaxed text-slate-500 mt-2">Silakan hubungi HRD terlebih dahulu untuk mendapatkan bantuan pendaftaran karyawan.</p>
+                </div>
+                <button type="button" onClick={() => setShowRegistrationClosedModal(false)} className="w-full mt-6 py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white text-xs font-extrabold shadow-lg shadow-violet-200 transition active:scale-[0.98]"><i className="fa-solid fa-check mr-2"></i>Mengerti</button>
+              </div>
+            </div>
+          )}
+
+          {loginRole === 'karyawan' && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => requestPwaInstall(showToast)}
+                className="w-full py-3.5 px-4 rounded-2xl border border-violet-200 bg-violet-50 hover:bg-violet-100 text-violet-700 font-bold text-xs transition active:scale-95 flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-download text-sm"></i>
+                <span>Install SuryaKuCan</span>
+              </button>
+              <p className="text-[10px] text-slate-400 text-center mt-2">
+                Pasang aplikasi agar lebih mudah dibuka dari layar utama.
+              </p>
+            </div>
+          )}
+
         </div>
       </div>
     );
@@ -1062,6 +1231,7 @@
       const [showSimpleFormModal, setShowSimpleFormModal] = useState(null); 
       const [filterStatusRiwayat, setFilterStatusRiwayat] = useState('Semua');
       const [cutoffFilter, setCutoffFilter] = useState('Semua');
+      const [showComingSoonApp, setShowComingSoonApp] = useState('');
 
       useEffect(() => {
         const timer = setInterval(() => setClock(new Date()), 1000);
@@ -1491,6 +1661,37 @@
           {/* Conditional Sub-Pages inside Employee Mobile Portal */}
           {currentRoute === '#status-karyawan' ? (
             <StatusRekanView karyawanList={karyawanList} presensiList={presensiList} currentUser={currentUser} />
+          ) : currentRoute === '#more-apps' ? (
+            <div className="px-5 pt-6 pb-28 space-y-5">
+              <div className="relative overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-violet-700 via-purple-600 to-fuchsia-500 p-5 text-white shadow-lg">
+                <div className="absolute -right-6 -top-8 w-32 h-32 rounded-full bg-white/10"></div>
+                <div className="absolute right-10 -bottom-10 w-28 h-28 rounded-full bg-white/10"></div>
+                <div className="relative flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-white/20 border border-white/20 flex items-center justify-center"><i className="fa-solid fa-layer-group text-xl"></i></div>
+                  <div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/75">SuryaKuCan Workspace</p><h2 className="text-xl font-extrabold">More Apps</h2><p className="text-xs text-white/80 mt-1">Akses cepat untuk kebutuhan operasional.</p></div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Cek Harga Surtok', icon: 'fa-magnifying-glass-dollar', color: 'from-violet-50 to-purple-100', ink: 'text-violet-700' },
+                  { label: 'Cek Harga Surcan', icon: 'fa-tags', color: 'from-sky-50 to-blue-100', ink: 'text-blue-700' },
+                  { label: 'Request Harga Coret', icon: 'fa-percent', color: 'from-rose-50 to-pink-100', ink: 'text-rose-700' },
+                  { label: 'Request Purchase Order', icon: 'fa-cart-shopping', color: 'from-amber-50 to-orange-100', ink: 'text-orange-700' },
+                  { label: 'Request Price Tag', icon: 'fa-ticket', color: 'from-emerald-50 to-teal-100', ink: 'text-emerald-700' },
+                  { label: 'Request Wobbler', icon: 'fa-sign-hanging', color: 'from-fuchsia-50 to-pink-100', ink: 'text-fuchsia-700' },
+                  { label: 'Stock Opname', icon: 'fa-clipboard-check', color: 'from-indigo-50 to-sky-100', ink: 'text-indigo-700', description: 'Pencatatan dan pemeriksaan stok.' },
+                  { label: 'Kasir Surtok', icon: 'fa-cash-register', color: 'from-pink-50 to-rose-100', ink: 'text-rose-700', description: 'Kasir untuk event di luar toko.' },
+                  { label: 'Kasir Surcan', icon: 'fa-store', color: 'from-cyan-50 to-teal-100', ink: 'text-teal-700', description: 'Kasir untuk event di luar toko.' }
+                ].map((app) => (
+                  <button key={app.label} onClick={() => setShowComingSoonApp(app.label)} className="group min-h-[142px] text-left bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition active:scale-[0.98]">
+                    <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${app.color} ${app.ink} flex items-center justify-center text-lg mb-3 group-hover:scale-105 transition`}><i className={`fa-solid ${app.icon}`}></i></div>
+                    <div className="text-xs font-extrabold text-slate-800 leading-snug">{app.label}</div>
+                    <div className="mt-1 text-[10px] leading-snug text-slate-500">{app.description || 'Akses cepat untuk kebutuhan operasional.'}</div>
+                    <div className="mt-2 flex items-center justify-between"><span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Coming soon</span><i className="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-300"></i></div>
+                  </button>
+                ))}
+              </div>
+            </div>
           ) : currentRoute === '#daftar-pengumuman' ? (
             <DaftarPengumumanKaryawanView 
               pengumumanList={pengumumanList} 
@@ -1812,21 +2013,25 @@
           )}
 
           {/* Floating Pill Bottom Navigation (Always Floating in Viewport) */}
-          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm z-50 pointer-events-auto">
-            <nav className="bg-white/95 backdrop-blur-2xl border border-slate-200/80 px-6 py-3 rounded-full flex justify-between items-center shadow-[0_12px_35px_rgba(0,0,0,0.12)]">
-              <button onClick={() => navigateTo('#karyawan')} className={`flex flex-col items-center space-y-1 transition ${currentRoute === '#karyawan' || currentRoute === '' ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-1.25rem)] max-w-md z-50 pointer-events-auto">
+            <nav className="bg-white/95 backdrop-blur-2xl border border-slate-200/80 px-2 py-2.5 rounded-full flex justify-around items-center gap-1 shadow-[0_12px_35px_rgba(0,0,0,0.12)]">
+              <button onClick={() => navigateTo('#karyawan')} className={`flex-1 min-w-0 flex flex-col items-center space-y-0.5 transition ${currentRoute === '#karyawan' || currentRoute === '' ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
                 <i className="fa-solid fa-house text-lg"></i>
                 <span className="text-[9px] font-bold">Beranda</span>
               </button>
-              <button onClick={() => navigateTo('#status-karyawan')} className={`flex flex-col items-center space-y-1 transition ${currentRoute === '#status-karyawan' ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
+              <button onClick={() => navigateTo('#status-karyawan')} className={`flex-1 min-w-0 flex flex-col items-center space-y-0.5 transition ${currentRoute === '#status-karyawan' ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
                 <i className="fa-solid fa-users text-lg"></i>
                 <span className="text-[9px] font-bold">Rekan</span>
               </button>
-              <button onClick={() => navigateTo('#riwayat-aktivitas')} className={`flex flex-col items-center space-y-1 transition ${currentRoute === '#riwayat-aktivitas' ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
+              <button onClick={() => navigateTo('#more-apps')} className={`flex-1 min-w-0 flex flex-col items-center space-y-0.5 transition ${currentRoute === '#more-apps' ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                <i className={`fa-solid fa-layer-group text-lg ${currentRoute === '#more-apps' ? 'text-violet-600' : ''}`}></i>
+                <span className="text-[9px] font-bold whitespace-nowrap">More Apps</span>
+              </button>
+              <button onClick={() => navigateTo('#riwayat-aktivitas')} className={`flex-1 min-w-0 flex flex-col items-center space-y-0.5 transition ${currentRoute === '#riwayat-aktivitas' ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
                 <i className="fa-solid fa-clock-rotate-left text-lg"></i>
                 <span className="text-[9px] font-bold">Riwayat</span>
               </button>
-              <button onClick={() => navigateTo('#profil')} className={`flex flex-col items-center space-y-1 transition ${currentRoute === '#profil' ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
+              <button onClick={() => navigateTo('#profil')} className={`flex-1 min-w-0 flex flex-col items-center space-y-0.5 transition ${currentRoute === '#profil' ? 'text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}>
                 {currentUser?.foto_profil ? (
                   <img
                     key={`${currentUser.foto_profil}_${currentUser.foto_profil_updated_at || 'nav'}`}
@@ -1841,6 +2046,25 @@
               </button>
             </nav>
           </div>
+
+          {/* Modal Coming Soon More Apps */}
+          {showComingSoonApp && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-5 bg-slate-950/45 backdrop-blur-md" onClick={() => setShowComingSoonApp('')}>
+              <div className="relative w-full max-w-xs overflow-hidden rounded-[2rem] bg-white shadow-2xl border border-white/70 animate-in fade-in zoom-in duration-200" onClick={(e) => e.stopPropagation()}>
+                <div className="h-2 bg-gradient-to-r from-violet-600 via-fuchsia-500 to-sky-400"></div>
+                <div className="p-6 text-center">
+                  <div className="relative mx-auto mb-4 w-20 h-20 rounded-[1.7rem] bg-gradient-to-br from-violet-100 via-fuchsia-50 to-sky-100 flex items-center justify-center text-violet-700 shadow-inner">
+                    <i className="fa-solid fa-rocket text-3xl"></i>
+                    <span className="absolute -right-1 -top-1 w-7 h-7 rounded-full bg-amber-400 text-white flex items-center justify-center border-4 border-white"><i className="fa-solid fa-sparkles text-[10px]"></i></span>
+                  </div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-violet-600 mb-2">SuryaKuCan • More Apps</p>
+                  <h3 className="text-xl font-extrabold text-slate-900">Coming Soon!</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-500"><span className="font-bold text-slate-700">{showComingSoonApp}</span> sedang kami siapkan agar bisa digunakan. Nantikan ya!</p>
+                  <button onClick={() => setShowComingSoonApp('')} className="mt-6 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-violet-200 transition hover:brightness-105 active:scale-[0.98]">Oke, Mengerti</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Modal Wizard Presensi Masuk / Keluar */}
           {showWizardModal && (
@@ -2892,36 +3116,36 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
             {filteredList.length > 0 ? filteredList.map((k, index) => {
               const att = presensiList.find(p => p.karyawan_id === k.id && p.tanggal === todayStr && p.tipe === 'masuk');
               return (
-                <div key={k.id} className="bg-white/90 backdrop-blur-xl p-4 rounded-3xl border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] flex items-center justify-between">
-                  <div className="flex items-center space-x-3 min-w-0">
-                    <span className="w-6 shrink-0 text-center text-[10px] font-bold text-slate-400">{index + 1}.</span>
-                    <div className="w-11 h-11 rounded-full bg-slate-50 flex items-center justify-center overflow-hidden border border-slate-100">
-                      {k.foto_profil ? <img src={getCleanImageUrl(k.foto_profil)} className="w-full h-full object-cover" /> : <span className="font-bold text-sm text-slate-400">{k.nama_lengkap[0]}</span>}
+                <div key={k.id} className="bg-white/90 backdrop-blur-xl p-4 rounded-3xl border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)]">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="w-5 shrink-0 pt-1 text-center text-[10px] font-bold text-slate-400">{index + 1}.</span>
+                    <div className="w-11 h-11 shrink-0 rounded-full bg-slate-50 flex items-center justify-center overflow-hidden border border-slate-100">
+                      {k.foto_profil ? <img src={getCleanImageUrl(k.foto_profil)} alt={`Foto ${k.nama_lengkap || 'karyawan'}`} className="w-full h-full object-cover" /> : <span className="font-bold text-sm text-slate-400">{String(k.nama_lengkap || '?').charAt(0)}</span>}
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0 space-y-1.5">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <h4 className="text-xs font-bold text-slate-800">{k.nama_lengkap}</h4>
+                        <h4 className="text-sm font-bold text-slate-800">{k.nama_lengkap || 'Nama belum diisi'}</h4>
                         {currentUser && String(k.id) === String(currentUser.id) && <span className="px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[8px] font-extrabold">ANDA</span>}
                       </div>
                       <p className="text-[10px] text-slate-400 font-medium">
-                        {k.divisi} {k.jabatan ? `• ${k.jabatan}` : ''}
+                        {k.divisi || 'Divisi belum diatur'}{k.jabatan ? ` - ${k.jabatan}` : ''}
                       </p>
+                      <div className="pt-0.5">
+                        {att ? (
+                          <span className={`inline-flex px-3 py-1 rounded-full text-[9px] font-bold ${
+                            att.status === 'Hadir' ? 'bg-emerald-50 text-emerald-600' :
+                            att.status === 'Terlambat' ? 'bg-amber-50 text-amber-600' :
+                            att.status === 'Libur' ? 'bg-sky-50 text-sky-600' :
+                            att.status === 'Izin' ? 'bg-orange-50 text-orange-600' :
+                            att.status === 'Sakit' ? 'bg-amber-50 text-amber-600' :
+                            att.status === 'Cuti' ? 'bg-purple-50 text-purple-600' :
+                            'bg-slate-50 text-slate-600'
+                          }`}>
+                            {att.status}{!['Sakit', 'Libur', 'Izin', 'Cuti'].includes(String(att.status || '').trim()) && att.jam ? ` · ${att.jam}` : ''}
+                          </span>
+                        ) : <span className="inline-flex px-3 py-1 rounded-full text-[9px] font-bold bg-slate-50 text-slate-400">Belum Absen</span>}
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    {att ? (
-                      <span className={`px-3 py-1 rounded-full text-[9px] font-bold ${
-                        att.status === 'Hadir' ? 'bg-emerald-50 text-emerald-600' :
-                        att.status === 'Terlambat' ? 'bg-amber-50 text-amber-600' :
-                        att.status === 'Libur' ? 'bg-sky-50 text-sky-600' :
-                        att.status === 'Izin' ? 'bg-orange-50 text-orange-600' :
-                        att.status === 'Sakit' ? 'bg-amber-50 text-amber-600' :
-                        att.status === 'Cuti' ? 'bg-purple-50 text-purple-600' :
-                        'bg-slate-50 text-slate-600'
-                      }`}>
-                        {att.status}{!['Sakit', 'Libur', 'Izin', 'Cuti'].includes(String(att.status || '').trim()) && att.jam ? ` (${att.jam})` : ''}
-                      </span>
-                    ) : <span className="px-3 py-1 rounded-full text-[9px] font-bold bg-slate-50 text-slate-400">Belum Absen</span>}
                   </div>
                 </div>
               );
@@ -3260,18 +3484,30 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
       karyawanList, setKaryawanList, presensiList, setPresensiList, lokasiList, setLokasiList,
       divisiList, setDivisiList, jabatanList, setJabatanList, shiftList, setShiftList, pengumumanList, setPengumumanList,
       adminList, setAdminList,
-      lemburList, setLemburList, klaimList, setKlaimList, toleransiMenit, setToleransiMenit, showToast, handleLogout
+      lemburList, setLemburList, klaimList, setKlaimList, toleransiMenit, setToleransiMenit, pendaftaranKaryawanAktif, setPendaftaranKaryawanAktif, showToast, handleLogout
     }) {
       const [activeModule, setActiveModule] = useState('harian'); 
       const [sidebarPinned, setSidebarPinned] = useState(true);
       const [selectedDate, setSelectedDate] = useState(getLocalDateKey());
       const [dateDraftHarian, setDateDraftHarian] = useState(formatDateDMY(getLocalDateKey()));
+      // Sinkronkan tanggal yang terlihat dengan tanggal filter yang aktif,
+      // termasuk saat pengguna menekan panah kiri/kanan atau memilih kalender.
+      useEffect(() => {
+        setDateDraftHarian(formatDateDMY(selectedDate));
+      }, [selectedDate]);
       const [filterStatusHarian, setFilterStatusHarian] = useState('Semua');
       const kalenderHarianRef = useRef(null);
       const [previewPhotoUrl, setPreviewPhotoUrl] = useState(null);
+      const [statusEvidenceModal, setStatusEvidenceModal] = useState(null);
       const [editingPresensiModal, setEditingPresensiModal] = useState(null);
       const [deleteConfirmState, setDeleteConfirmState] = useState(null);
       const [isDeleting, setIsDeleting] = useState(false);
+      const [showExportHarianModal, setShowExportHarianModal] = useState(false);
+      const [exportTanggalMulai, setExportTanggalMulai] = useState(getLocalDateKey());
+      const [exportTanggalSelesai, setExportTanggalSelesai] = useState(getLocalDateKey());
+      const [exportTanggalMulaiDraft, setExportTanggalMulaiDraft] = useState(formatDateDMY(getLocalDateKey()));
+      const [exportTanggalSelesaiDraft, setExportTanggalSelesaiDraft] = useState(formatDateDMY(getLocalDateKey()));
+      const [isExportingHarian, setIsExportingHarian] = useState(false);
 
       const exportToExcel = (data, fileName) => {
         const ws = XLSX.utils.json_to_sheet(data);
@@ -3279,6 +3515,79 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
         XLSX.utils.book_append_sheet(wb, ws, "Data");
         XLSX.writeFile(wb, `${fileName}_${Date.now()}.xlsx`);
         showToast('Excel diunduh!');
+      };
+
+      const handleExportRekapanHarian = () => {
+        if (!exportTanggalMulai || !exportTanggalSelesai) {
+          showToast('Pilih tanggal mulai dan tanggal selesai.', 'error');
+          return;
+        }
+        if (exportTanggalMulai > exportTanggalSelesai) {
+          showToast('Tanggal mulai tidak boleh melewati tanggal selesai.', 'error');
+          return;
+        }
+        if (typeof XLSX === 'undefined') {
+          showToast('Fitur Excel belum siap. Muat ulang halaman dan coba lagi.', 'error');
+          return;
+        }
+        setIsExportingHarian(true);
+        try {
+          const dateKeys = [];
+          const cursor = new Date(`${exportTanggalMulai}T12:00:00`);
+          const end = new Date(`${exportTanggalSelesai}T12:00:00`);
+          while (cursor <= end) {
+            const yyyy = cursor.getFullYear();
+            const mm = String(cursor.getMonth() + 1).padStart(2, '0');
+            const dd = String(cursor.getDate()).padStart(2, '0');
+            dateKeys.push(`${yyyy}-${mm}-${dd}`);
+            cursor.setDate(cursor.getDate() + 1);
+          }
+
+          const rows = [];
+          dateKeys.forEach(tanggal => {
+            [...karyawanList]
+              .sort((a, b) => String(a.nama_lengkap || '').localeCompare(String(b.nama_lengkap || ''), 'id'))
+              .forEach(k => {
+                const records = presensiList.filter(item =>
+                  String(item.karyawan_id) === String(k.id) && item.tanggal === tanggal
+                );
+                const masuk = records.find(item => item.tipe === 'masuk');
+                const pulang = records.find(item => item.tipe === 'keluar');
+                const special = records.find(item => ['Sakit', 'Izin', 'Cuti', 'Libur'].includes(String(item.status || '').trim()));
+                const noTimes = !!special;
+                rows.push({
+                  'Tanggal': formatDateDMY(tanggal),
+                  'Nama Karyawan': k.nama_lengkap || '',
+                  'Nomor Induk Karyawan': k.nik || '',
+                  'Divisi': k.divisi || '',
+                  'Jabatan': k.jabatan || '',
+                  'Shift': (masuk?.shift_nama || pulang?.shift_nama || (k.shifts && k.shifts[0]) || ''),
+                  'Jam Masuk': noTimes ? '-' : (masuk?.jam || '-'),
+                  'Jam Pulang': noTimes ? '-' : (pulang?.jam || '-'),
+                  'Status': special?.status || masuk?.status || pulang?.status || 'Belum Masuk',
+                  'Keterangan': special?.keterangan || masuk?.keterangan || pulang?.keterangan || '',
+                  'Foto Bukti / Masuk': noTimes ? '-' : (masuk?.foto_url || ''),
+                  'Foto Pulang': noTimes ? '-' : (pulang?.foto_url || '')
+                });
+              });
+          });
+          const ws = XLSX.utils.json_to_sheet(rows);
+          ws['!cols'] = [
+            { wch: 13 }, { wch: 28 }, { wch: 20 }, { wch: 18 }, { wch: 20 },
+            { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 36 },
+            { wch: 48 }, { wch: 48 }
+          ];
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'Rekapan Harian');
+          XLSX.writeFile(wb, `Rekapan_Presensi_Harian_${exportTanggalMulai}_sampai_${exportTanggalSelesai}.xlsx`);
+          setShowExportHarianModal(false);
+          showToast(`Excel berhasil diekspor (${rows.length} baris).`);
+        } catch (error) {
+          console.error('Gagal export rekapan harian:', error);
+          showToast('Gagal membuat file Excel. Silakan coba lagi.', 'error');
+        } finally {
+          setIsExportingHarian(false);
+        }
       };
 
       const requestHapusPresensi = (karyawanId, karyawanNama) => {
@@ -3457,6 +3766,8 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                 divisiList={divisiList} 
                 jabatanList={jabatanList} 
                 lokasiList={lokasiList}
+                pendaftaranKaryawanAktif={pendaftaranKaryawanAktif}
+                setPendaftaranKaryawanAktif={setPendaftaranKaryawanAktif}
                 showToast={showToast} 
                 setPreviewPhotoUrl={setPreviewPhotoUrl}
               />
@@ -3469,6 +3780,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                     <h2 className="font-display font-bold text-xl text-slate-800">Rekapan Presensi Harian</h2>
                     <p className="text-xs text-slate-400 font-medium">Tinjauan shift, jam, foto selfie, dan status kehadiran karyawan harian</p>
                   </div>
+                  <div className="flex items-center gap-2 flex-wrap">
                   <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 p-1 rounded-2xl shadow-sm">
                     {/* Tombol Panah Kiri (Hari Sebelumnya) */}
                     <button 
@@ -3528,6 +3840,14 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                     >
                       <i className="fa-solid fa-chevron-right text-xs"></i>
                     </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setExportTanggalMulai(selectedDate); setExportTanggalSelesai(selectedDate); setExportTanggalMulaiDraft(formatDateDMY(selectedDate)); setExportTanggalSelesaiDraft(formatDateDMY(selectedDate)); setShowExportHarianModal(true); }}
+                    className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition active:scale-95"
+                  >
+                    <i className="fa-solid fa-file-excel"></i> Export Excel
+                  </button>
                   </div>
                 </div>
                 {(() => {
@@ -3606,12 +3926,15 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                             const m = presensiList.find(p => p.karyawan_id === k.id && p.tanggal === selectedDate && p.tipe === 'masuk');
                             const p = presensiList.find(p => p.karyawan_id === k.id && p.tanggal === selectedDate && p.tipe === 'keluar');
                             const shiftTerpakai = m?.shift_nama || p?.shift_nama || (k.shifts && k.shifts[0]) || 'Reguler';
+                            const statusRecord = [m, p].find(item => item && ['Sakit', 'Izin', 'Cuti', 'Libur'].includes(String(item.status || '').trim())) || m || p;
+                            const isStatusTanpaJam = !!statusRecord && ['Sakit', 'Izin', 'Cuti', 'Libur'].includes(String(statusRecord.status || '').trim());
+                            const needsEvidenceButton = !!statusRecord && ['Sakit', 'Izin', 'Cuti'].includes(String(statusRecord.status || '').trim());
                             
                             return (
                               <tr key={k.id} className="hover:bg-slate-50/50 transition">
                                 <td className="p-4 text-center font-mono-numbers text-slate-400 font-bold">{i + 1}</td>
                                 <td className="p-4">
-                                  <div className="font-bold text-slate-800">{k.nama_lengkap}</div>
+                                  <div className="font-bold text-slate-800">{k.nama_lengkap || 'Nama belum diisi'}</div>
                                   <div className="text-[10px] text-slate-400 font-medium">{k.divisi} {k.jabatan ? `• ${k.jabatan}` : ''}</div>
                                 </td>
                                 <td className="p-4">
@@ -3620,14 +3943,14 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                                     {shiftTerpakai}
                                   </span>
                                 </td>
-                                <td className="p-4 font-mono-numbers font-semibold text-slate-700">{m ? m.jam : '-'}</td>
-                                <td className="p-4 font-mono-numbers font-semibold text-slate-700">{p ? p.jam : '-'}</td>
+                                <td className="p-4 font-mono-numbers font-semibold text-slate-700">{!isStatusTanpaJam && m ? (m.jam || '-') : '-'}</td>
+                                <td className="p-4 font-mono-numbers font-semibold text-slate-700">{!isStatusTanpaJam && p ? (p.jam || '-') : '-'}</td>
                                 
                                 {/* Foto Selfie Masuk */}
                                 <td className="p-4 text-center">
-                                  {m?.foto_url ? (
+                                  {!isStatusTanpaJam && m?.foto_url ? (
                                     <button 
-                                      onClick={() => setPreviewPhotoUrl({ url: getCleanImageUrl(m.foto_url), label: `Foto Masuk - ${k.nama_lengkap} (${m.jam})` })}
+                                      onClick={() => setPreviewPhotoUrl({ url: getCleanImageUrl(m.foto_url), label: `Foto Masuk - ${k.nama_lengkap || 'Nama belum diisi'} (${m.jam})` })}
                                       className="relative group inline-block"
                                       title="Klik untuk perbesar"
                                     >
@@ -3647,9 +3970,9 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
 
                                 {/* Foto Selfie Pulang */}
                                 <td className="p-4 text-center">
-                                  {p?.foto_url ? (
+                                  {!isStatusTanpaJam && p?.foto_url ? (
                                     <button 
-                                      onClick={() => setPreviewPhotoUrl({ url: getCleanImageUrl(p.foto_url), label: `Foto Pulang - ${k.nama_lengkap} (${p.jam})` })}
+                                      onClick={() => setPreviewPhotoUrl({ url: getCleanImageUrl(p.foto_url), label: `Foto Pulang - ${k.nama_lengkap || 'Nama belum diisi'} (${p.jam})` })}
                                       className="relative group inline-block"
                                       title="Klik untuk perbesar"
                                     >
@@ -3685,6 +4008,22 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                                 {/* Ikon Edit dan Hapus */}
                                 <td className="p-4 text-center">
                                   <div className="flex items-center justify-center space-x-1">
+                                    {needsEvidenceButton && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setStatusEvidenceModal({
+                                          karyawan: k,
+                                          tanggal: selectedDate,
+                                          status: statusRecord.status,
+                                          foto_url: statusRecord.foto_url || '',
+                                          keterangan: statusRecord.keterangan || ''
+                                        })}
+                                        className="px-3 h-8 rounded-full bg-violet-50 text-violet-700 hover:bg-violet-100 active:scale-95 transition text-[10px] font-bold whitespace-nowrap"
+                                        title="Lihat foto bukti dan keterangan"
+                                      >
+                                        <i className="fa-solid fa-file-circle-check mr-1"></i>Lihat Bukti
+                                      </button>
+                                    )}
                                     <button 
                                       onClick={() => setEditingPresensiModal({
                                         karyawan: k,
@@ -3735,6 +4074,36 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
             )}
 
             {}
+            {/* Modal Export Rekapan Presensi Harian */}
+            {showExportHarianModal && (
+              <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={() => !isExportingHarian && setShowExportHarianModal(false)}>
+                <div className="bg-white rounded-[2rem] max-w-md w-full p-6 shadow-2xl border border-slate-100" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-start justify-between gap-3 mb-5">
+                    <div>
+                      <h3 className="text-lg font-extrabold text-slate-800"><i className="fa-solid fa-file-excel text-emerald-600 mr-2"></i>Export Rekapan Harian</h3>
+                      <p className="text-xs text-slate-500 mt-1">Pilih rentang tanggal yang ingin diunduh ke Excel.</p>
+                    </div>
+                    <button type="button" disabled={isExportingHarian} onClick={() => setShowExportHarianModal(false)} className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center"><i className="fa-solid fa-xmark"></i></button>
+                  </div>
+                  <div className="space-y-4">
+                    <label className="block">
+                      <span className="block text-xs font-bold text-slate-600 mb-2">Tanggal Mulai</span>
+                      <input type="text" inputMode="numeric" placeholder="dd/mm/yyyy" value={exportTanggalMulaiDraft} onChange={e => setExportTanggalMulaiDraft(e.target.value)} onBlur={() => { const m = exportTanggalMulaiDraft.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if (m) { const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]); const dt = new Date(y, mo - 1, d); if (dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d) { const key = `${y}-${m[2]}-${m[1]}`; setExportTanggalMulai(key); if (exportTanggalSelesai && key > exportTanggalSelesai) { setExportTanggalSelesai(key); setExportTanggalSelesaiDraft(m[1] + '/' + m[2] + '/' + m[3]); } return; } } setExportTanggalMulaiDraft(formatDateDMY(exportTanggalMulai)); }} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-emerald-400" required />
+                    </label>
+                    <label className="block">
+                      <span className="block text-xs font-bold text-slate-600 mb-2">Tanggal Selesai</span>
+                      <input type="text" inputMode="numeric" placeholder="dd/mm/yyyy" value={exportTanggalSelesaiDraft} onChange={e => setExportTanggalSelesaiDraft(e.target.value)} onBlur={() => { const m = exportTanggalSelesaiDraft.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if (m) { const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]); const dt = new Date(y, mo - 1, d); if (dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d) { const key = `${y}-${m[2]}-${m[1]}`; setExportTanggalSelesai(key); if (exportTanggalMulai && key < exportTanggalMulai) { setExportTanggalMulai(key); setExportTanggalMulaiDraft(m[1] + '/' + m[2] + '/' + m[3]); } return; } } setExportTanggalSelesaiDraft(formatDateDMY(exportTanggalSelesai)); }} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-emerald-400" required />
+                    </label>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">File berisi daftar semua karyawan untuk setiap tanggal dalam rentang yang dipilih, termasuk yang belum masuk. Status Sakit, Izin, Cuti, dan Libur tidak menampilkan jam atau foto presensi.</p>
+                    <div className="flex gap-2 pt-1">
+                      <button type="button" disabled={isExportingHarian} onClick={() => setShowExportHarianModal(false)} className="flex-1 py-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Batal</button>
+                      <button type="button" disabled={isExportingHarian} onClick={handleExportRekapanHarian} className="flex-1 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold shadow-sm">{isExportingHarian ? <><i className="fa-solid fa-spinner fa-spin mr-2"></i>Memproses...</> : <><i className="fa-solid fa-download mr-2"></i>Unduh Excel</>}</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Modal Pratinjau Foto Selfie */}
             {previewPhotoUrl && (
               <div 
@@ -3768,6 +4137,45 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                   >
                     Tutup
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Bukti Sakit/Izin/Cuti */}
+            {statusEvidenceModal && (
+              <div
+                className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[60] flex items-center justify-center p-4"
+                onClick={() => setStatusEvidenceModal(null)}
+              >
+                <div
+                  className="bg-white rounded-[2rem] max-w-md w-full p-5 shadow-2xl border border-slate-100"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-800">Bukti {statusEvidenceModal.status}</h3>
+                      <p className="text-xs text-slate-500 mt-1">{statusEvidenceModal.karyawan?.nama_lengkap} · {statusEvidenceModal.tanggal}</p>
+                    </div>
+                    <button type="button" onClick={() => setStatusEvidenceModal(null)} className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center" aria-label="Tutup">
+                      <i className="fa-solid fa-xmark"></i>
+                    </button>
+                  </div>
+                  <div className="mb-4">
+                    <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2">Keterangan</div>
+                    <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3 text-sm text-slate-700 whitespace-pre-wrap break-words">{statusEvidenceModal.keterangan?.trim() || 'Tidak ada keterangan yang diisi.'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2">Foto Bukti</div>
+                    {statusEvidenceModal.foto_url ? (
+                      <button type="button" className="block w-full" onClick={() => { setPreviewPhotoUrl({ url: getCleanImageUrl(statusEvidenceModal.foto_url), label: `Bukti ${statusEvidenceModal.status} - ${statusEvidenceModal.karyawan?.nama_lengkap}` }); setStatusEvidenceModal(null); }}>
+                        <img src={getCleanImageUrl(statusEvidenceModal.foto_url)} alt={`Bukti ${statusEvidenceModal.status}`} className="w-full max-h-80 object-contain rounded-2xl bg-slate-50 border border-slate-200" onError={e => { e.currentTarget.style.display = 'none'; }} />
+                        <span className="text-[10px] text-violet-600 font-bold mt-2 inline-block"><i className="fa-solid fa-magnifying-glass-plus mr-1"></i>Klik foto untuk memperbesar</span>
+                      </button>
+                    ) : (
+                      <div className="rounded-2xl bg-slate-50 border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400"><i className="fa-regular fa-image text-2xl block mb-2"></i>Foto bukti tidak tersedia.</div>
+                    )}
+                  </div>
+                  <button type="button" onClick={() => setStatusEvidenceModal(null)} className="w-full mt-5 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-full font-bold text-xs">Tutup</button>
                 </div>
               </div>
             )}
@@ -5002,9 +5410,25 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
     }
 
     // Modern Minimalist Master Karyawan View
-    function MasterKaryawanView({ karyawanList, setKaryawanList, divisiList, jabatanList, lokasiList = [], showToast, setPreviewPhotoUrl }) {
+    function MasterKaryawanView({ karyawanList = [], setKaryawanList, divisiList = [], jabatanList = [], lokasiList = [], pendaftaranKaryawanAktif = false, setPendaftaranKaryawanAktif, showToast, setPreviewPhotoUrl }) {
+      // Normalisasi defensif agar data Supabase yang null/bukan array tidak membuat halaman blank.
+      karyawanList = Array.isArray(karyawanList) ? karyawanList : [];
+      divisiList = Array.isArray(divisiList) ? divisiList : [];
+      jabatanList = Array.isArray(jabatanList) ? jabatanList : [];
+      lokasiList = Array.isArray(lokasiList) ? lokasiList : [];
       const [showModal, setShowModal] = useState(false);
       const [editingId, setEditingId] = useState(null);
+      const [savingPendaftaran, setSavingPendaftaran] = useState(false);
+      const handleTogglePendaftaran = async (enabled) => {
+        if (!setPendaftaranKaryawanAktif) return;
+        setSavingPendaftaran(true);
+        try {
+          await setPendaftaranKaryawanAktif(enabled);
+          showToast(enabled ? 'Pendaftaran karyawan berhasil diaktifkan.' : 'Pendaftaran karyawan berhasil dinonaktifkan.');
+        } catch (error) {
+          showToast(`Pengaturan pendaftaran gagal disimpan: ${error.message || 'periksa izin tabel settings.'}`, 'error');
+        } finally { setSavingPendaftaran(false); }
+      };
       const [form, setForm] = useState({ 
         nama_lengkap: '', 
         nik: '',
@@ -5072,7 +5496,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
       }, []);
 
       // Urutkan A-Z berdasarkan nama lengkap
-      const sortedKaryawanList = [...karyawanList].sort((a, b) => a.nama_lengkap.localeCompare(b.nama_lengkap));
+      const sortedKaryawanList = [...(Array.isArray(karyawanList) ? karyawanList : [])].filter(Boolean).sort((a, b) => String(a?.nama_lengkap || '').localeCompare(String(b?.nama_lengkap || ''), 'id')); 
 
       const availableJabatan = useMemo(() => {
         if (!form.divisi) return jabatanList;
@@ -5228,6 +5652,19 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
               <i className="fa-solid fa-plus mr-2"></i> Tambah Karyawan
             </button>
           </div>
+          <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${pendaftaranKaryawanAktif ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}><i className={`fa-solid ${pendaftaranKaryawanAktif ? 'fa-user-check' : 'fa-user-lock'} text-lg`}></i></div>
+              <div>
+                <h3 className="font-display font-bold text-base text-slate-800">Pendaftaran Karyawan Mandiri</h3>
+                <p className="text-xs text-slate-500 mt-1">Atur apakah karyawan dapat membuka formulir pendaftaran dari halaman login.</p>
+                <p className={`text-[11px] font-bold mt-2 ${pendaftaranKaryawanAktif ? 'text-emerald-600' : 'text-amber-600'}`}>{pendaftaranKaryawanAktif ? 'Status: AKTIF — formulir dapat dibuka' : 'Status: NONAKTIF — karyawan diminta menghubungi HRD'}</p>
+              </div>
+            </div>
+            <button type="button" disabled={savingPendaftaran} onClick={() => handleTogglePendaftaran(!pendaftaranKaryawanAktif)} className={`px-5 py-3 rounded-2xl text-xs font-bold transition disabled:opacity-50 whitespace-nowrap ${pendaftaranKaryawanAktif ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100' : 'bg-violet-600 text-white hover:bg-violet-700'}`}>
+              <i className={`fa-solid ${savingPendaftaran ? 'fa-spinner fa-spin' : pendaftaranKaryawanAktif ? 'fa-toggle-on' : 'fa-toggle-off'} mr-2`}></i>{savingPendaftaran ? 'Menyimpan...' : pendaftaranKaryawanAktif ? 'Nonaktifkan Pendaftaran' : 'Aktifkan Pendaftaran'}
+            </button>
+          </div>
           <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
@@ -5251,17 +5688,17 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                         {k.foto_profil ? (
                           <button
                             type="button"
-                            onClick={() => setPreviewPhotoUrl({ url: getCleanImageUrl(k.foto_profil), label: `Foto Profil - ${k.nama_lengkap}` })}
+                            onClick={() => setPreviewPhotoUrl({ url: getCleanImageUrl(k.foto_profil), label: `Foto Profil - ${k.nama_lengkap || 'Nama belum diisi'}` })}
                             className="relative group inline-block"
                             title="Klik untuk memperbesar foto"
                           >
                             <img 
                               src={getCleanImageUrl(k.foto_profil)} 
-                              alt={k.nama_lengkap} 
+                              alt={k.nama_lengkap || 'Nama belum diisi'} 
                               className="w-10 h-10 rounded-full object-cover border-2 border-violet-200 shadow-sm group-hover:scale-105 group-hover:border-violet-500 transition"
                               onError={(e) => {
                                 e.target.onerror = null;
-                                e.target.parentElement.innerHTML = `<div class="w-10 h-10 rounded-full bg-violet-100 text-violet-700 font-bold text-xs flex items-center justify-center border border-violet-200">${k.nama_lengkap.split(' ').map(n=>n[0]).slice(0, 2).join('')}</div>`;
+                                e.target.parentElement.innerHTML = `<div class="w-10 h-10 rounded-full bg-violet-100 text-violet-700 font-bold text-xs flex items-center justify-center border border-violet-200">${String(k.nama_lengkap || '?').split(' ').filter(Boolean).map(n=>n[0]).slice(0, 2).join('')}</div>`;
                               }}
                             />
                             <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-violet-600 text-white text-[8px] flex items-center justify-center shadow">
@@ -5270,14 +5707,14 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                           </button>
                         ) : (
                           <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 font-bold text-xs flex items-center justify-center border border-slate-200 shadow-inner" title="Belum unggah foto profil">
-                            {k.nama_lengkap.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                            {String(k.nama_lengkap || '?').split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('')}
                           </div>
                         )}
                       </div>
                     </td>
 
                     <td className="p-4">
-                      <div className="font-bold text-slate-800">{k.nama_lengkap}</div>
+                      <div className="font-bold text-slate-800">{k.nama_lengkap || 'Nama belum diisi'}</div>
                       <div className="text-[10px] text-slate-400 font-medium">{k.email || k.no_wa}</div>
                     </td>
                     <td className="p-4 font-mono-numbers text-slate-500">{k.username}</td>
@@ -5289,7 +5726,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                     </td>
                     <td className="p-4 text-center">
                       <button onClick={()=>openModal(k)} className="w-8 h-8 rounded-full bg-slate-50 text-indigo-500 hover:bg-indigo-50 mx-1" title="Edit Data Karyawan"><i className="fa-solid fa-pen-to-square"></i></button>
-                      <button onClick={()=>{setKaryawanList(karyawanList.filter(x=>x.id!==k.id)); showToast('Karyawan dihapus!')}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1" title="Hapus Karyawan"><i className="fa-solid fa-trash"></i></button>
+                      <button onClick={()=>{setKaryawanList((Array.isArray(karyawanList) ? karyawanList : []).filter(x=>x.id!==k.id)); showToast('Karyawan dihapus!')}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1" title="Hapus Karyawan"><i className="fa-solid fa-trash"></i></button>
                     </td>
                   </tr>
                 ))}
@@ -5397,7 +5834,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                            <div>
                              <span className="text-[10px] font-bold text-violet-700 block leading-tight">Shift Terhubung:</span>
                              <span className="text-[10px] font-medium text-violet-600">
-                               {divisiList.find(d => d.nama_divisi === form.divisi).shifts.join(', ') || 'Belum ada shift terkait'}
+                               {(Array.isArray(divisiList.find(d => d.nama_divisi === form.divisi)?.shifts) ? divisiList.find(d => d.nama_divisi === form.divisi).shifts : []).join(', ') || 'Belum ada shift terkait'}
                              </span>
                            </div>
                          </div>
@@ -5612,6 +6049,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
           showToast(`Toleransi gagal disimpan: ${error.message || 'periksa koneksi dan izin tabel settings.'}`, 'error');
         }
       };
+
 
       return (
         <div className="space-y-6">
