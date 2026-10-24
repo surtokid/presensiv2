@@ -780,7 +780,7 @@ const DEFAULT_MORE_APPS = [
     return (
       <div className="min-h-screen flex flex-col justify-between">
         {/* Top Navigation Bar: Ditampilkan kembali */}
-        <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
+        <header className="hidden bg-white/90 backdrop-blur-md border-b border-slate-200/90 text-slate-700 py-2.5 px-3 sm:px-6 flex justify-between items-center z-50 sticky top-0 shadow-xs">
           {/* Brand Logo */}
           <div 
             onClick={() => navigateTo(isDashboardRoute ? '#dashboard' : '#karyawan')}
@@ -1661,7 +1661,8 @@ const DEFAULT_MORE_APPS = [
       return (
         <div className="max-w-md mx-auto min-h-screen bg-slate-50/70 flex flex-col pb-28 shadow-2xl relative">
           
-          {/* Hero Header Card (Solid Light Color) */}
+          {/* Kartu profil dan jam hanya tampil di halaman Beranda karyawan */}
+          {(currentRoute === '#karyawan' || currentRoute === '') && (
           <div className="bg-[#fff0f3] text-slate-800 p-6 rounded-b-[2.5rem] border-b border-rose-100 shadow-[0_15px_40px_-15px_rgba(0,0,0,0.05)] relative z-20">
             <div className="flex items-center justify-between mb-5 relative z-10">
               <div className="flex items-center space-x-3.5 min-w-0 flex-1">
@@ -1766,15 +1767,26 @@ const DEFAULT_MORE_APPS = [
               )}
             </div>
           </div>
+          )}
 
           {/* Conditional Sub-Pages inside Employee Mobile Portal */}
           {currentRoute === '#status-karyawan' ? (
             <StatusRekanView karyawanList={karyawanList} presensiList={presensiList} currentUser={currentUser} />
           ) : currentRoute === '#more-apps' ? (
             <div className="px-5 pt-4 pb-28 space-y-5">
+              <div className="relative overflow-hidden rounded-3xl border border-violet-100 bg-gradient-to-r from-violet-50 via-white to-fuchsia-50 p-4 shadow-sm">
+                <div className="pointer-events-none absolute -right-5 -top-7 h-24 w-24 rounded-full bg-fuchsia-200/40 blur-2xl"></div>
+                <div className="relative flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-500 text-white shadow-md shadow-violet-200"><i className="fa-solid fa-layer-group text-lg"></i></div>
+                  <div className="min-w-0">
+                    <h2 className="text-base font-extrabold leading-snug text-slate-900">App Center Suryatokoku &amp; Surya Cantik</h2>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-600">Akses semua aplikasi untuk mendukung aktivitas operasional toko dalam satu aplikasi.</p>
+                  </div>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 {(Array.isArray(moreAppsCatalog) ? moreAppsCatalog : DEFAULT_MORE_APPS).filter(app => app && typeof app === 'object' && typeof app.label === 'string' && app.label.trim()).map(app => ({ color: app.color || 'from-violet-50 to-purple-100', ink: app.ink || 'text-violet-700', icon: app.icon || 'fa-layer-group', description: app.description || 'Akses cepat untuk kebutuhan operasional.', ...app })).filter(app => Array.isArray(moreAppsAccess?.[app.label]) && moreAppsAccess[app.label].some(id => String(id) === String(currentUser?.id))).map((app) => (
-                  <button key={app.label} onClick={() => setShowComingSoonApp(app.label)} className="group min-h-[142px] text-left bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition active:scale-[0.98]">
+                  <button key={app.label} onClick={() => { if (app.url && /^https?:\/\//i.test(app.url.trim())) { window.location.href = app.url.trim(); } else { setShowComingSoonApp(app.label); } }} className="group min-h-[142px] text-left bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition active:scale-[0.98]">
                     <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${app.color} ${app.ink} flex items-center justify-center text-lg mb-3 group-hover:scale-105 transition`}><i className={`fa-solid ${app.icon}`}></i></div>
                     <div className="text-xs font-extrabold text-slate-800 leading-snug">{app.label}</div>
                     <div className="mt-1 text-[10px] leading-snug text-slate-500">{app.description || 'Akses cepat untuk kebutuhan operasional.'}</div>
@@ -3148,6 +3160,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
 
     function StatusRekanView({ karyawanList, presensiList, currentUser }) {
       const [filterStatus, setFilterStatus] = React.useState('Semua');
+      const [searchNama, setSearchNama] = React.useState('');
       const todayStr = getLocalDateKey();
 
       // Hitung jumlah rekan untuk masing-masing filter secara real-time hari ini
@@ -3185,7 +3198,11 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
       const filters = ['Semua', 'Masuk', 'Belum Masuk', 'Libur', 'Izin', 'Sakit', 'Cuti'];
 
       const filteredList = karyawanList.filter(k => {
-        const att = presensiList.find(p => p.karyawan_id === k.id && p.tanggal === todayStr && p.tipe === 'masuk');
+        const nama = String(k.nama_lengkap || '').toLocaleLowerCase('id-ID');
+        const query = searchNama.trim().toLocaleLowerCase('id-ID');
+        if (query && !nama.includes(query)) return false;
+
+        const att = presensiList.find(p => String(p.karyawan_id) === String(k.id) && p.tanggal === todayStr && p.tipe === 'masuk');
         const currentStatus = att ? att.status : 'Belum Absen';
         
         if (filterStatus === 'Semua') return true;
@@ -3204,6 +3221,19 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
             <span className="px-3 py-1 bg-white border border-slate-100 shadow-sm text-slate-700 rounded-full text-[10px] font-bold">
               {filteredList.length} Orang
             </span>
+          </div>
+
+          <div className="relative">
+            <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+            <input
+              type="text"
+              value={searchNama}
+              onChange={e => setSearchNama(e.target.value)}
+              placeholder="Cari nama karyawan..."
+              aria-label="Cari nama karyawan"
+              className="w-full rounded-2xl border border-slate-200 bg-white/90 py-3 pl-11 pr-10 text-sm text-slate-700 placeholder:text-slate-400 shadow-sm outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
+            />
+            {searchNama && <button type="button" onClick={() => setSearchNama('')} aria-label="Hapus pencarian" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><i className="fa-solid fa-xmark"></i></button>}
           </div>
 
           <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
@@ -3266,7 +3296,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
               );
             }) : (
               <div className="text-center py-10 text-slate-400">
-                <p className="text-xs font-medium">Tidak ada rekan dengan status {filterStatus}</p>
+                <p className="text-xs font-medium">{searchNama.trim() ? `Tidak ada karyawan dengan nama “${searchNama.trim()}”` : `Tidak ada rekan dengan status ${filterStatus}`}</p>
               </div>
             )}
           </div>
@@ -4604,20 +4634,22 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
       const appItems = (Array.isArray(moreAppsCatalog) ? moreAppsCatalog : DEFAULT_MORE_APPS).filter(app => app && typeof app === 'object' && typeof app.label === 'string' && app.label.trim());
       const [showAppForm, setShowAppForm] = useState(false);
       const [editingLabel, setEditingLabel] = useState('');
-      const [appForm, setAppForm] = useState({ label: '', description: '', icon: 'fa-layer-group' });
+      const [appForm, setAppForm] = useState({ label: '', description: '', icon: 'fa-layer-group', url: '' });
       const [savingCatalog, setSavingCatalog] = useState(false);
-      const openNewApp = () => { setEditingLabel(''); setAppForm({ label: '', description: '', icon: 'fa-layer-group' }); setShowAppForm(true); };
-      const openEditApp = app => { setEditingLabel(app.label); setAppForm({ label: app.label, description: app.description || '', icon: app.icon || 'fa-layer-group' }); setShowAppForm(true); };
+      const openNewApp = () => { setEditingLabel(''); setAppForm({ label: '', description: '', icon: 'fa-layer-group', url: '' }); setShowAppForm(true); };
+      const openEditApp = app => { setEditingLabel(app.label); setAppForm({ label: app.label, description: app.description || '', icon: app.icon || 'fa-layer-group', url: app.url || '' }); setShowAppForm(true); };
       const saveApp = async () => {
         const label = appForm.label.trim();
         if (!label) { showToast('Masukkan nama aplikasi terlebih dahulu.', 'error'); return; }
+        const urlValue = appForm.url.trim();
+        if (urlValue) { try { const parsedUrl = new URL(urlValue); if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('protocol'); } catch (_) { showToast('URL tujuan harus lengkap dan diawali https:// atau http://.', 'error'); return; } }
         if (appItems.some(a => a.label.toLowerCase() === label.toLowerCase() && a.label !== editingLabel)) { showToast('Nama aplikasi sudah digunakan.', 'error'); return; }
         if (typeof setMoreAppsCatalog !== 'function') { showToast('Fungsi penyimpanan katalog belum tersedia.', 'error'); return; }
         const palette = ['from-violet-50 to-purple-100|text-violet-700','from-sky-50 to-cyan-100|text-sky-700','from-amber-50 to-orange-100|text-amber-700','from-emerald-50 to-teal-100|text-emerald-700','from-fuchsia-50 to-pink-100|text-fuchsia-700'];
         const [color, ink] = palette[appItems.length % palette.length].split('|');
         const next = editingLabel
-          ? appItems.map(a => a.label === editingLabel ? { ...a, label, description: appForm.description.trim(), icon: appForm.icon.trim() || 'fa-layer-group' } : a)
-          : [...appItems, { label, description: appForm.description.trim(), icon: appForm.icon.trim() || 'fa-layer-group', color, ink }];
+          ? appItems.map(a => a.label === editingLabel ? { ...a, label, description: appForm.description.trim(), icon: appForm.icon.trim() || 'fa-layer-group', url: urlValue } : a)
+          : [...appItems, { label, description: appForm.description.trim(), icon: appForm.icon.trim() || 'fa-layer-group', url: urlValue, color, ink }];
         setSavingCatalog(true);
         try {
           await setMoreAppsCatalog(next);
@@ -4672,7 +4704,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
               {appItems.map(app => <div key={app.label} className="flex items-center gap-3 rounded-2xl border border-slate-100 p-3"><div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${app.color || 'bg-violet-50'} ${app.ink || 'text-violet-700'}`}><i className={`fa-solid ${app.icon || 'fa-layer-group'}`}></i></div><div className="min-w-0 flex-1"><p className="truncate text-xs font-extrabold text-slate-800">{app.label}</p><p className="truncate text-[10px] text-slate-500">{app.description || 'Tanpa deskripsi'}</p></div><button title="Edit aplikasi" onClick={() => openEditApp(app)} className="h-8 w-8 rounded-lg text-violet-600 hover:bg-violet-50"><i className="fa-solid fa-pen"></i></button><button title="Hapus aplikasi" onClick={() => deleteApp(app)} className="h-8 w-8 rounded-lg text-rose-500 hover:bg-rose-50"><i className="fa-solid fa-trash"></i></button></div>)}
             </div>
           </section>
-          {showAppForm && <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><div><h3 className="text-lg font-extrabold text-slate-900">{editingLabel ? 'Edit Aplikasi' : 'Buat Aplikasi Baru'}</h3><p className="mt-1 text-xs text-slate-500">Tombol karyawan otomatis menggunakan popup Coming Soon.</p></div><button onClick={() => setShowAppForm(false)} className="h-9 w-9 rounded-full bg-slate-100 text-slate-500"><i className="fa-solid fa-xmark"></i></button></div><div className="space-y-4"><label className="block text-xs font-bold text-slate-600">Nama aplikasi<input value={appForm.label} onChange={e => setAppForm(v => ({...v,label:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-violet-400" placeholder="Contoh: Cek Promo" /></label><label className="block text-xs font-bold text-slate-600">Deskripsi aplikasi<textarea value={appForm.description} onChange={e => setAppForm(v => ({...v,description:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-violet-400" rows="2" placeholder="Jelaskan fungsi aplikasi" /></label><label className="block text-xs font-bold text-slate-600">Ikon Font Awesome<input value={appForm.icon} onChange={e => setAppForm(v => ({...v,icon:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-violet-400" placeholder="fa-layer-group" /><span className="mt-1 block text-[10px] text-slate-400">Masukkan nama kelas ikon, misalnya fa-box, fa-tags, atau fa-calculator.</span></label><div className="flex items-center gap-3 rounded-xl bg-violet-50 p-3 text-violet-700"><i className={`fa-solid ${appForm.icon || 'fa-layer-group'} text-xl`}></i><span className="text-xs font-bold">{appForm.label || 'Pratinjau ikon aplikasi'}</span></div><div className="flex gap-2 pt-2"><button type="button" disabled={savingCatalog} onClick={() => setShowAppForm(false)} className="flex-1 rounded-full bg-slate-100 py-3 text-xs font-bold text-slate-600">Batal</button><button type="button" disabled={savingCatalog} onClick={saveApp} className="flex-1 rounded-full bg-violet-600 py-3 text-xs font-bold text-white disabled:opacity-50">{savingCatalog ? 'Menyimpan...' : 'Simpan Aplikasi'}</button></div></div></div></div>}
+          {showAppForm && <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><div><h3 className="text-lg font-extrabold text-slate-900">{editingLabel ? 'Edit Aplikasi' : 'Buat Aplikasi Baru'}</h3><p className="mt-1 text-xs text-slate-500">Tombol karyawan otomatis menggunakan popup Coming Soon.</p></div><button onClick={() => setShowAppForm(false)} className="h-9 w-9 rounded-full bg-slate-100 text-slate-500"><i className="fa-solid fa-xmark"></i></button></div><div className="space-y-4"><label className="block text-xs font-bold text-slate-600">Nama aplikasi<input value={appForm.label} onChange={e => setAppForm(v => ({...v,label:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-violet-400" placeholder="Contoh: Cek Promo" /></label><label className="block text-xs font-bold text-slate-600">Deskripsi aplikasi<textarea value={appForm.description} onChange={e => setAppForm(v => ({...v,description:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-violet-400" rows="2" placeholder="Jelaskan fungsi aplikasi" /></label><label className="block text-xs font-bold text-slate-600">Ikon Font Awesome<input value={appForm.icon} onChange={e => setAppForm(v => ({...v,icon:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-violet-400" placeholder="fa-layer-group" /><span className="mt-1 block text-[10px] text-slate-400">Masukkan nama kelas ikon, misalnya fa-box, fa-tags, atau fa-calculator.</span></label><label className="block text-xs font-bold text-slate-600">URL tujuan aplikasi (opsional)<input type="url" value={appForm.url || ''} onChange={e => setAppForm(v => ({...v,url:e.target.value}))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-violet-400" placeholder="https://contoh-domain.com" /><span className="mt-1 block text-[10px] text-slate-400">Jika diisi, tombol More Apps akan membuka URL ini. Jika dikosongkan, tombol menampilkan popup Coming Soon.</span></label><div className="flex items-center gap-3 rounded-xl bg-violet-50 p-3 text-violet-700"><i className={`fa-solid ${appForm.icon || 'fa-layer-group'} text-xl`}></i><span className="text-xs font-bold">{appForm.label || 'Pratinjau ikon aplikasi'}</span></div><div className="flex gap-2 pt-2"><button type="button" disabled={savingCatalog} onClick={() => setShowAppForm(false)} className="flex-1 rounded-full bg-slate-100 py-3 text-xs font-bold text-slate-600">Batal</button><button type="button" disabled={savingCatalog} onClick={saveApp} className="flex-1 rounded-full bg-violet-600 py-3 text-xs font-bold text-white disabled:opacity-50">{savingCatalog ? 'Menyimpan...' : 'Simpan Aplikasi'}</button></div></div></div></div>}
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(240px,0.8fr)_minmax(320px,1.2fr)]">
             <section className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm"><h3 className="mb-3 text-sm font-extrabold text-slate-800">Pilih Menu / Aplikasi</h3><div className="space-y-2">{appItems.map(app => <button key={app.label} onClick={() => setSelectedApp(app.label)} className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${selectedApp === app.label ? 'border-violet-200 bg-violet-50 text-violet-800' : 'border-slate-100 hover:bg-slate-50 text-slate-600'}`}><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${selectedApp === app.label ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-500'}`}><i className={`fa-solid ${app.icon}`}></i></span><span className="min-w-0 flex-1"><span className="block text-xs font-extrabold">{app.label}</span><span className="mt-0.5 block text-[10px] text-slate-500">{app.description}</span></span><i className={`fa-solid fa-chevron-right text-[10px] ${selectedApp === app.label ? 'text-violet-500' : 'text-slate-300'}`}></i></button>)}</div></section>
             <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm"><div className="border-b border-slate-100 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-base font-extrabold text-slate-800">Daftar Karyawan</h3><p className="mt-1 text-xs text-slate-500">Akses untuk: <strong>{selectedApp}</strong></p></div><span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-extrabold text-violet-700">{draftIds.length} dipilih</span></div><div className="mt-4"><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama, NIK, divisi..." className="w-full rounded-xl border border-slate-200 px-4 py-3 text-xs outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" /></div><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => setAll(true)} className="rounded-full border border-violet-200 bg-violet-50 px-3 py-2 text-[11px] font-bold text-violet-700 hover:bg-violet-100"><i className="fa-solid fa-check-double mr-1"></i>Select All</button><button type="button" onClick={() => setAll(false)} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50"><i className="fa-solid fa-xmark mr-1"></i>Unselect All</button></div></div><div className="max-h-[52vh] overflow-y-auto p-3">{filtered.map(k => { const checked = draftIds.includes(String(k.id)); return <label key={k.id} className={`mb-1 flex cursor-pointer items-center gap-3 rounded-xl p-3 transition ${checked ? 'bg-violet-50' : 'hover:bg-slate-50'}`}><input type="checkbox" checked={checked} onChange={e => setDraftIds(prev => e.target.checked ? [...new Set([...prev, String(k.id)])] : prev.filter(id => id !== String(k.id)))} className="h-4 w-4 accent-violet-600"/><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-slate-800">{k.nama_lengkap || 'Tanpa nama'}</span><span className="mt-0.5 block truncate text-[10px] text-slate-500">{[k.nik, k.divisi, k.jabatan].filter(Boolean).join(' • ') || 'Data karyawan'}</span></span></label>; })}{filtered.length === 0 && <p className="p-6 text-center text-xs text-slate-400">Karyawan tidak ditemukan.</p>}</div><div className="border-t border-slate-100 bg-slate-50 p-4"><button disabled={saving} onClick={save} className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-xs font-extrabold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-60"><i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}></i>{saving ? 'Menyimpan...' : 'Simpan Pengaturan Akses'}</button></div></section>
