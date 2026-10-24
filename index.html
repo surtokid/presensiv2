@@ -6,7 +6,7 @@
   <title>SuryaKuCan</title>
   <link rel="icon" type="image/png" href="./Logo%20SuryaKuCan.png">
   <link rel="apple-touch-icon" href="./Logo%20SuryaKuCan.png">
-  <link rel="manifest" href="./manifest.json?v=suryakucan-v3">
+  <link rel="manifest" href="./manifest.json?v=suryakucan-v4">
   <meta name="theme-color" content="#ec4899">
   <meta name="application-name" content="SuryaKuCan">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1786,7 +1786,7 @@ const DEFAULT_MORE_APPS = [
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {(Array.isArray(moreAppsCatalog) ? moreAppsCatalog : DEFAULT_MORE_APPS).filter(app => app && typeof app === 'object' && typeof app.label === 'string' && app.label.trim()).map(app => ({ color: app.color || 'from-violet-50 to-purple-100', ink: app.ink || 'text-violet-700', icon: app.icon || 'fa-layer-group', description: app.description || 'Akses cepat untuk kebutuhan operasional.', ...app })).filter(app => Array.isArray(moreAppsAccess?.[app.label]) && moreAppsAccess[app.label].some(id => String(id) === String(currentUser?.id))).map((app) => (
-                  <button key={app.label} onClick={() => { if (app.url && /^https?:\/\//i.test(app.url.trim())) { window.location.href = app.url.trim(); } else { setShowComingSoonApp(app.label); } }} className="group min-h-[142px] text-left bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition active:scale-[0.98]">
+                  <button key={app.label} onClick={() => { if (app.url && /^https?:\/\//i.test(app.url.trim())) { try { const target = new URL(app.url.trim(), window.location.href); if (target.origin === window.location.origin) { window.location.assign(target.href); } else { window.location.assign(target.href); } } catch (error) { setShowComingSoonApp(app.label); } } else { setShowComingSoonApp(app.label); } }} className="group min-h-[142px] text-left bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition active:scale-[0.98]">
                     <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${app.color} ${app.ink} flex items-center justify-center text-lg mb-3 group-hover:scale-105 transition`}><i className={`fa-solid ${app.icon}`}></i></div>
                     <div className="text-xs font-extrabold text-slate-800 leading-snug">{app.label}</div>
                     <div className="mt-1 text-[10px] leading-snug text-slate-500">{app.description || 'Akses cepat untuk kebutuhan operasional.'}</div>
