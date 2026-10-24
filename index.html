@@ -891,6 +891,7 @@ const DEFAULT_MORE_APPS = [
                 setMoreAppsCatalog={setMoreAppsCatalogSynced}
                 showToast={showToast}
                 handleLogout={handleLogout}
+                currentUser={currentUser}
               />
             ) : (
               /* Belum Login Admin pada #dashboard: Tampilkan Form Login Admin */
@@ -1116,15 +1117,15 @@ const DEFAULT_MORE_APPS = [
             </div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold mb-2 border uppercase tracking-wider bg-slate-50 text-slate-600 border-slate-200">
               <span className={`w-2 h-2 rounded-full ${loginRole === 'admin' ? 'bg-indigo-600' : 'bg-violet-600'}`}></span>
-              {loginRole === 'admin' ? 'Login Administrator HR' : 'Login Portal Karyawan'}
+              {loginRole === 'admin' ? 'Login Administrator' : 'Login Karyawan'}
             </div>
             <h2 className="font-display font-extrabold text-2xl text-slate-800 tracking-tight">
-              {loginRole === 'admin' ? 'WORKSPACE HRD' : 'SURYAKUCAN'}
+              {loginRole === 'admin' ? 'SURYAKUCAN' : 'SURYAKUCAN'}
             </h2>
             <p className="text-xs text-slate-500 font-medium mt-1">
               {loginRole === 'admin' 
-                ? 'Akses panel administrasi rekapan & master data' 
-                : 'Presensi digital, cuti, libur & riwayat kehadiran'}
+                ? 'Akses Panel Administrasi Operational Toko' 
+                : 'Sistem Digital Presensi & Manajemen Operasional Toko'}
             </p>
           </div>
 
@@ -1139,7 +1140,7 @@ const DEFAULT_MORE_APPS = [
                 <input 
                   type="text" 
                   required
-                  placeholder={loginRole === 'karyawan' ? "Awil atau 081234567890" : "admin atau hrd@suryatokoku.com"}
+                  placeholder={loginRole === 'karyawan' ? "Ex : Awil / 0838xxxx / awilistrators@gmail.com" : "admin atau hrd@suryatokoku.com"}
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl pl-10 pr-4 py-3.5 font-bold text-slate-700 outline-none focus:border-violet-500 focus:bg-white transition"
@@ -1182,7 +1183,7 @@ const DEFAULT_MORE_APPS = [
                 <input 
                   type={showPassword ? 'text' : 'password'}
                   required
-                  placeholder="Masukkan kata sandi..."
+                  placeholder="Masukan kata sandi, bukan kata awil..."
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl pl-10 pr-11 py-3.5 font-bold text-slate-700 outline-none focus:border-violet-500 focus:bg-white transition font-mono-numbers"
@@ -1214,11 +1215,17 @@ const DEFAULT_MORE_APPS = [
               ) : (
                 <>
                   <i className="fa-solid fa-right-to-bracket text-xs"></i>
-                  <span>Masuk Sebagai {loginRole === 'karyawan' ? 'Karyawan' : 'Admin HR'}</span>
+                  <span>Masuk</span>
                 </>
               )}
             </button>
           </form>
+
+          {loginRole === 'admin' && (
+            <p className="mt-4 text-[10px] text-slate-400 text-center">
+              <i className="fa-regular fa-copyright mr-1"></i>Operational Development Suryatokoku 2026
+            </p>
+          )}
 
           {loginRole === 'karyawan' && (
             <button
@@ -1230,7 +1237,7 @@ const DEFAULT_MORE_APPS = [
               className="w-full mt-3 py-3.5 px-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition active:scale-95 flex items-center justify-center gap-2"
             >
               <i className="fa-solid fa-user-plus text-sm"></i>
-              <span>Daftar Karyawan</span>
+              <span>Daftar Akun</span>
             </button>
           )}
 
@@ -1260,6 +1267,7 @@ const DEFAULT_MORE_APPS = [
               </button>
               <p className="text-[10px] text-slate-400 text-center mt-2">
                 Pasang aplikasi agar lebih mudah dibuka dari layar utama.
+              <span className="block mt-2"><i className="fa-regular fa-copyright mr-1"></i>Operational Development Suryatokoku 2026</span>
               </p>
             </div>
           )}
@@ -1786,15 +1794,15 @@ const DEFAULT_MORE_APPS = [
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {(Array.isArray(moreAppsCatalog) ? moreAppsCatalog : DEFAULT_MORE_APPS).filter(app => app && typeof app === 'object' && typeof app.label === 'string' && app.label.trim()).map(app => ({ color: app.color || 'from-violet-50 to-purple-100', ink: app.ink || 'text-violet-700', icon: app.icon || 'fa-layer-group', description: app.description || 'Akses cepat untuk kebutuhan operasional.', ...app })).filter(app => Array.isArray(moreAppsAccess?.[app.label]) && moreAppsAccess[app.label].some(id => String(id) === String(currentUser?.id))).map((app) => (
-                  <button key={app.label} onClick={() => { if (app.url && /^https?:\/\//i.test(app.url.trim())) { try { const target = new URL(app.url.trim(), window.location.href); if (target.origin === window.location.origin) { window.location.assign(target.href); } else { window.location.assign(target.href); } } catch (error) { setShowComingSoonApp(app.label); } } else { setShowComingSoonApp(app.label); } }} className="group min-h-[142px] text-left bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition active:scale-[0.98]">
+                  <button key={app.label} onClick={() => { if (app.url && /^https?:\/\//i.test(String(app.url).trim())) { try { const target = new URL(String(app.url).trim(), window.location.href); window.location.assign(target.href); } catch (error) { setShowComingSoonApp(app.label); } } else { setShowComingSoonApp(app.label); } }} className={`group min-h-[142px] text-left border rounded-2xl p-4 transition active:scale-[0.98] ${app.url && /^https?:\/\//i.test(String(app.url).trim()) ? 'bg-white border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5' : 'bg-slate-100 border-slate-200 shadow-sm hover:bg-slate-200'}`}>
                     <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${app.color} ${app.ink} flex items-center justify-center text-lg mb-3 group-hover:scale-105 transition`}><i className={`fa-solid ${app.icon}`}></i></div>
                     <div className="text-xs font-extrabold text-slate-800 leading-snug">{app.label}</div>
                     <div className="mt-1 text-[10px] leading-snug text-slate-500">{app.description || 'Akses cepat untuk kebutuhan operasional.'}</div>
-                    <div className="mt-2 flex items-center justify-between"><span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Coming soon</span><i className="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-300"></i></div>
+                    <div className="mt-2 flex items-center justify-between">{!(app.url && /^https?:\/\//i.test(String(app.url).trim())) && <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Coming soon</span>}{app.url && /^https?:\/\//i.test(String(app.url).trim()) && <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600">Buka aplikasi</span>}<i className={`fa-solid fa-arrow-up-right-from-square text-[10px] ${app.url && /^https?:\/\//i.test(String(app.url).trim()) ? 'text-slate-300' : 'text-slate-400'}`}></i></div>
                   </button>
                 ))}
                 {!( (Array.isArray(moreAppsCatalog) ? moreAppsCatalog : DEFAULT_MORE_APPS).filter(app => app && typeof app === 'object' && typeof app.label === 'string' && app.label.trim()).some(app => Array.isArray(moreAppsAccess?.[app.label]) && moreAppsAccess[app.label].some(id => String(id) === String(currentUser?.id))) ) && (
-                  <div className="col-span-2 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center"><div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-500"><i className="fa-solid fa-grid-2 text-xl"></i></div><p className="text-sm font-bold text-slate-700">Belum ada aplikasi yang ditetapkan</p><p className="mt-1 text-xs text-slate-500">Hubungi admin HR jika Anda memerlukan akses More Apps.</p></div>
+                  <div className="col-span-2 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center"><div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-600"><i className="fa-solid fa-mobile-screen-button text-xl" aria-hidden="true"></i></div><p className="text-sm font-bold text-slate-700">Belum ada aplikasi yang ditetapkan</p><p className="mt-1 text-xs text-slate-500">Hubungi Operational Development Suryatokoku jika Anda memerlukan akses More Apps.</p></div>
                 )}
               </div>
             </div>
@@ -1841,12 +1849,9 @@ const DEFAULT_MORE_APPS = [
                       </button>
                     </div>
 
-                    {/* Judul, Kategori & Tanggal */}
+                    {/* Judul & Tanggal */}
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="px-2.5 py-0.5 rounded-full bg-violet-50 text-violet-700 text-[9px] font-bold border border-violet-100">
-                          {latest.kategori || 'Informasi Umum'}
-                        </span>
                         <span className="text-[10px] font-mono-numbers text-slate-400 font-medium">
                           {new Date(latest.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </span>
@@ -3033,30 +3038,15 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
 
     function DaftarPengumumanKaryawanView({ pengumumanList, onSelectAnnouncement, navigateTo }) {
       const [searchQuery, setSearchQuery] = useState('');
-      const [selectedFilter, setSelectedFilter] = useState('Semua');
-
-      const kategoriList = ['Semua', 'Payroll', 'Operasional', 'Hari Libur', 'Informasi Umum'];
-
       const filteredList = useMemo(() => {
         return pengumumanList.filter(item => {
-          const matchKategori = selectedFilter === 'Semua' || (item.kategori || 'Informasi Umum') === selectedFilter;
           const matchSearch = !searchQuery.trim() || 
             item.judul.toLowerCase().includes(searchQuery.toLowerCase()) ||
             item.isi.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (item.author && item.author.toLowerCase().includes(searchQuery.toLowerCase()));
-          return matchKategori && matchSearch;
+          return matchSearch;
         });
-      }, [pengumumanList, selectedFilter, searchQuery]);
-
-      const getBadgeClass = (kategori) => {
-        switch (kategori) {
-          case 'Payroll': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-          case 'Operasional': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
-          case 'Hari Libur': return 'bg-sky-50 text-sky-700 border-sky-200';
-          case 'Kebijakan Perusahaan': return 'bg-rose-50 text-rose-700 border-rose-200';
-          default: return 'bg-violet-50 text-violet-700 border-violet-200';
-        }
-      };
+      }, [pengumumanList, searchQuery]);
 
       return (
         <div className="p-5 space-y-4 pb-28">
@@ -3092,23 +3082,6 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
             />
           </div>
 
-          {/* Filter Kategori Chips */}
-          <div className="flex flex-wrap gap-1.5 pb-1 text-[10px] font-bold">
-            {kategoriList.map(kat => (
-              <button 
-                key={kat}
-                onClick={() => setSelectedFilter(kat)}
-                className={`px-3 py-1.5 rounded-full transition shadow-sm ${
-                  selectedFilter === kat 
-                    ? 'bg-slate-900 text-white' 
-                    : 'bg-white text-slate-600 border border-slate-100 hover:bg-slate-50'
-                }`}
-              >
-                {kat}
-              </button>
-            ))}
-          </div>
-
           {/* List Kartu Pengumuman */}
           <div className="space-y-3">
             {filteredList.length > 0 ? (
@@ -3118,10 +3091,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                   onClick={() => onSelectAnnouncement(item)}
                   className="bg-white/95 backdrop-blur-xl p-4 rounded-3xl border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] hover:shadow-md cursor-pointer transition active:scale-[0.99] space-y-2.5"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold border ${getBadgeClass(item.kategori || 'Informasi Umum')}`}>
-                      {item.kategori || 'Informasi Umum'}
-                    </span>
+                  <div className="flex items-center justify-end">
                     <span className="text-[10px] font-mono-numbers text-slate-400 font-medium">
                       {new Date(item.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
                     </span>
@@ -3694,14 +3664,47 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
       return requiredValues.some(value => value === null || value === undefined || String(value).trim() === '');
     }
 
+    const ADMIN_MENU_OPTIONS = [
+      { id: 'hrd', label: 'HRD' },
+      { id: 'admin', label: 'Master User' },
+      { id: 'more_apps', label: 'Master More Apps' },
+      { id: 'pengumuman', label: 'Pengumuman' }
+    ];
+    const ADMIN_MENU_ALL = ADMIN_MENU_OPTIONS.map(item => item.id);
+    const encodeAdminMenuAccess = (ids) => 'MENU_ACCESS:' + ADMIN_MENU_ALL.filter(id => (ids || []).includes(id)).join(',');
+    const decodeAdminMenuAccess = (role) => {
+      if (typeof role === 'string' && role.startsWith('MENU_ACCESS:')) {
+        const saved = role.slice('MENU_ACCESS:'.length).split(',').map(v => v.trim()).filter(Boolean);
+        return ADMIN_MENU_ALL.filter(id => saved.includes(id));
+      }
+      // Akun lama dengan role teks biasa tetap mendapat akses penuh agar tidak kehilangan akses setelah update.
+      return [...ADMIN_MENU_ALL];
+    };
+    const getAdminMenuLabels = (role) => ADMIN_MENU_OPTIONS.filter(item => decodeAdminMenuAccess(role).includes(item.id)).map(item => item.label);
+
     function AdminDashboard({
       karyawanList, setKaryawanList, presensiList, setPresensiList, lokasiList, setLokasiList,
       divisiList, setDivisiList, jabatanList, setJabatanList, shiftList, setShiftList, pengumumanList, setPengumumanList,
       adminList, setAdminList,
-      lemburList, setLemburList, klaimList, setKlaimList, toleransiMenit, setToleransiMenit, pendaftaranKaryawanAktif, setPendaftaranKaryawanAktif, moreAppsAccess = {}, setMoreAppsAccess, moreAppsCatalog = DEFAULT_MORE_APPS, setMoreAppsCatalog, showToast, handleLogout
+      lemburList, setLemburList, klaimList, setKlaimList, toleransiMenit, setToleransiMenit, pendaftaranKaryawanAktif, setPendaftaranKaryawanAktif, moreAppsAccess = {}, setMoreAppsAccess, moreAppsCatalog = DEFAULT_MORE_APPS, setMoreAppsCatalog, showToast, handleLogout, currentUser
     }) {
       const [activeModule, setActiveModule] = useState('harian'); 
       const [sidebarPinned, setSidebarPinned] = useState(true);
+      const [hrdExpanded, setHrdExpanded] = useState(true);
+      const hrdModuleIds = ['harian', 'periode', 'shift', 'divisi', 'jabatan', 'lokasi', 'karyawan', 'libur_cuti', 'lembur'];
+      const activeAdminRecord = adminList.find(a => String(a.id) === String(currentUser?.id)) || currentUser || {};
+      const allowedAdminMenus = decodeAdminMenuAccess(activeAdminRecord.role);
+      const canAccessHrd = allowedAdminMenus.includes('hrd');
+      useEffect(() => {
+        const activeTopLevel = hrdModuleIds.includes(activeModule) ? 'hrd' : activeModule;
+        if (!allowedAdminMenus.includes(activeTopLevel)) {
+          const fallback = allowedAdminMenus.includes('hrd') ? 'harian' :
+            allowedAdminMenus.includes('admin') ? 'admin' :
+            allowedAdminMenus.includes('more_apps') ? 'more_apps' :
+            allowedAdminMenus.includes('pengumuman') ? 'pengumuman' : 'no_access';
+          setActiveModule(fallback);
+        }
+      }, [activeModule, activeAdminRecord.role]);
       const [selectedDate, setSelectedDate] = useState(getLocalDateKey());
       const [dateDraftHarian, setDateDraftHarian] = useState(formatDateDMY(getLocalDateKey()));
       // Sinkronkan tanggal yang terlihat dengan tanggal filter yang aktif,
@@ -3937,20 +3940,38 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                 <button onClick={() => setSidebarPinned(!sidebarPinned)} className="w-8 h-8 rounded-lg bg-slate-50 hover:bg-slate-100 flex items-center justify-center mx-auto text-slate-400"><i className={`fa-solid ${sidebarPinned ? 'fa-bars-staggered' : 'fa-bars'} text-xs`}></i></button>
               </div>
               <nav className="p-3 space-y-1.5 text-xs font-bold">
-                {[
-                  { id: 'harian', label: 'Rekapan Harian', icon: 'fa-calendar-day' },
-                  { id: 'periode', label: 'Rekapan 26-25', icon: 'fa-calendar-week' },
-                  { id: 'libur_cuti', label: 'Master Libur & Cuti', icon: 'fa-umbrella-beach' },
-                  { id: 'karyawan', label: 'Master Karyawan', icon: 'fa-users' },
-                  { id: 'more_apps', label: 'Master More Apps', icon: 'fa-layer-group' },
-                  { id: 'lokasi', label: 'Master Lokasi', icon: 'fa-map-pin' },
-                  { id: 'shift', label: 'Master Shift', icon: 'fa-clock' },
-                  { id: 'divisi', label: 'Master Divisi', icon: 'fa-layer-group' },
-                  { id: 'jabatan', label: 'Master Jabatan', icon: 'fa-id-badge' },
-                  { id: 'lembur', label: 'Pengajuan Lembur', icon: 'fa-business-time' },
-                  { id: 'admin', label: 'Master Admin HR', icon: 'fa-user-shield' },
-                  { id: 'pengumuman', label: 'Pengumuman', icon: 'fa-bullhorn' }
-                ].map(item => (
+                {canAccessHrd && <>
+                <button
+                  onClick={() => setHrdExpanded(prev => !prev)}
+                  aria-expanded={hrdExpanded}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition ${hrdModuleIds.includes(activeModule) ? 'bg-violet-50 text-violet-700 shadow-sm border border-violet-100/50' : 'hover:bg-slate-50 text-slate-500'}`}
+                  title="HRD"
+                >
+                  <i className={`fa-solid fa-people-group text-sm w-5 text-center ${hrdModuleIds.includes(activeModule) ? 'text-violet-500' : ''}`}></i>
+                  {sidebarPinned && <><span className="truncate flex-1 text-left">HRD</span><i className={`fa-solid fa-chevron-${hrdExpanded ? 'down' : 'right'} text-[10px]`}></i></>}
+                </button>
+                {hrdExpanded && (
+                  <div className="ml-3 pl-2 border-l border-slate-200 space-y-1">
+                    {[
+                      { id: 'harian', label: 'Rekapan Harian', icon: 'fa-calendar-day' },
+                      { id: 'periode', label: 'Rekapan Periode', icon: 'fa-calendar-week' },
+                      { id: 'shift', label: 'Master Shift', icon: 'fa-clock' },
+                      { id: 'divisi', label: 'Master Divisi', icon: 'fa-layer-group' },
+                      { id: 'jabatan', label: 'Master Jabatan', icon: 'fa-id-badge' },
+                      { id: 'lokasi', label: 'Master Lokasi', icon: 'fa-map-pin' },
+                      { id: 'karyawan', label: 'Master Karyawan', icon: 'fa-users' },
+                      { id: 'libur_cuti', label: 'Master Libur & Cuti', icon: 'fa-umbrella-beach' },
+                      { id: 'lembur', label: 'Pengajuan Lembur', icon: 'fa-business-time' }
+                    ].map(item => (
+                      <button key={item.id} onClick={() => setActiveModule(item.id)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition ${activeModule === item.id ? 'bg-violet-50 text-violet-700 shadow-sm border border-violet-100/50' : 'hover:bg-slate-50 text-slate-500'}`}>
+                        <i className={`fa-solid ${item.icon} text-xs w-5 text-center ${activeModule === item.id ? 'text-violet-500' : ''}`}></i>
+                        {sidebarPinned && <span className="truncate flex-1 text-left">{item.label}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                </>}
+                {ADMIN_MENU_OPTIONS.filter(item => item.id !== 'hrd' && allowedAdminMenus.includes(item.id)).map(item => ({ ...item, icon: item.id === 'admin' ? 'fa-user-shield' : item.id === 'more_apps' ? 'fa-layer-group' : 'fa-bullhorn' })).map(item => (
                   <button key={item.id} onClick={() => setActiveModule(item.id)} className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition ${activeModule === item.id ? 'bg-violet-50 text-violet-700 shadow-sm border border-violet-100/50' : 'hover:bg-slate-50 text-slate-500'}`}>
                     <i className={`fa-solid ${item.icon} text-sm w-5 text-center ${activeModule === item.id ? 'text-violet-500' : ''}`}></i>
                     {sidebarPinned && <span className="truncate flex-1 text-left">{item.label}</span>}
@@ -3992,6 +4013,9 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
               <MasterMoreAppsView karyawanList={karyawanList} moreAppsAccess={moreAppsAccess} setMoreAppsAccess={setMoreAppsAccess} moreAppsCatalog={moreAppsCatalog} setMoreAppsCatalog={setMoreAppsCatalog} showToast={showToast} />
             )}
 
+            {activeModule === 'no_access' && (
+              <div className="bg-white rounded-3xl border border-slate-100 p-8 text-center shadow-sm"><div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600"><i className="fa-solid fa-lock text-xl"></i></div><h2 className="text-lg font-extrabold text-slate-800">Belum Ada Menu yang Diizinkan</h2><p className="mt-2 text-sm text-slate-500">Hubungi administrator untuk mengatur hak akses menu akun ini.</p></div>
+            )}
             {activeModule === 'harian' && (
               <div className="space-y-6">
                 <div className="flex flex-wrap justify-between items-center gap-4 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
@@ -4621,7 +4645,8 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
               <MasterPengumumanView 
                 pengumumanList={pengumumanList} 
                 setPengumumanList={setPengumumanList} 
-                showToast={showToast} 
+                showToast={showToast}
+                currentUser={activeAdminRecord}
               />
             )}
 
@@ -5818,7 +5843,12 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
 
       const availableJabatan = useMemo(() => {
         if (!form.divisi) return jabatanList;
-        return jabatanList.filter(j => j.divisi === form.divisi);
+        return jabatanList.filter(j => {
+          const divisiJabatan = Array.isArray(j.divisi)
+            ? j.divisi
+            : String(j.divisi || '').split('|').map(value => value.trim()).filter(Boolean);
+          return divisiJabatan.includes(form.divisi);
+        });
       }, [form.divisi, jabatanList]);
 
       const openModal = async (k = null) => {
@@ -5989,7 +6019,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                 <tr className="bg-slate-50 text-slate-400 uppercase font-bold border-b border-slate-100 text-[10px] tracking-wider">
                   <th className="p-4 text-center">No</th>
                   <th className="p-4 text-center">Foto Profil</th>
-                  <th className="p-4">Nama Lengkap</th>
+                  <th className="p-4">Divisi</th>
                   <th className="p-4">Username</th>
                   <th className="p-4">Divisi & Jabatan</th>
                   <th className="p-4 text-center">Aksi</th>
@@ -6203,6 +6233,10 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
       const [showModal, setShowModal] = useState(false);
       const [editingId, setEditingId] = useState(null);
       const [form, setForm] = useState({ nama_lokasi: '', latitude: '', longitude: '', radius_meter: 100 });
+      const mapContainerRef = useRef(null);
+      const mapRef = useRef(null);
+      const markerRef = useRef(null);
+      const circleRef = useRef(null);
 
       // Urutkan A-Z
       const sortedList = [...lokasiList].sort((a, b) => a.nama_lokasi.localeCompare(b.nama_lokasi));
@@ -6216,9 +6250,106 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
         setShowModal(true);
       };
 
+      const updateCoordinates = (lat, lng) => {
+        const latitude = Number(lat);
+        const longitude = Number(lng);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+        setForm(prev => ({ ...prev, latitude: latitude.toFixed(6), longitude: longitude.toFixed(6) }));
+      };
+
+      // Peta OpenStreetMap; klik peta untuk memindahkan pin.
+      useEffect(() => {
+        if (!showModal || !mapContainerRef.current || !window.L) return;
+        const hasCoords = form.latitude !== '' && form.longitude !== '' && Number.isFinite(Number(form.latitude)) && Number.isFinite(Number(form.longitude)) && !(Number(form.latitude) === 0 && Number(form.longitude) === 0);
+        const initialCenter = hasCoords ? [Number(form.latitude), Number(form.longitude)] : [-7.797, 110.370];
+        const map = window.L.map(mapContainerRef.current, { zoomControl: true }).setView(initialCenter, hasCoords ? 16 : 5);
+        mapRef.current = map;
+        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>'
+        }).addTo(map);
+
+        const marker = window.L.marker(initialCenter, { draggable: true }).addTo(map);
+        markerRef.current = marker;
+        const circle = window.L.circle(initialCenter, {
+          radius: Math.max(1, Number(form.radius_meter) || 100),
+          color: '#ec4899',
+          fillColor: '#ec4899',
+          fillOpacity: 0.12,
+          weight: 2
+        }).addTo(map);
+        circleRef.current = circle;
+
+        marker.on('dragend', () => {
+          const pos = marker.getLatLng();
+          updateCoordinates(pos.lat, pos.lng);
+        });
+        map.on('click', (event) => {
+          marker.setLatLng(event.latlng);
+          circle.setLatLng(event.latlng);
+          updateCoordinates(event.latlng.lat, event.latlng.lng);
+        });
+
+        // Pastikan ukuran peta benar setelah modal tampil.
+        const resizeTimer = setTimeout(() => map.invalidateSize(), 120);
+        return () => {
+          clearTimeout(resizeTimer);
+          map.remove();
+          if (mapRef.current === map) mapRef.current = null;
+          markerRef.current = null;
+          circleRef.current = null;
+        };
+      }, [showModal, editingId]);
+
+      // Sinkronkan pin dan lingkaran radius jika koordinat/radius diketik manual.
+      useEffect(() => {
+        if (!showModal || !mapRef.current || !markerRef.current || !circleRef.current) return;
+        const lat = Number(form.latitude);
+        const lng = Number(form.longitude);
+        if (form.latitude !== '' && form.longitude !== '' && Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+          const point = [lat, lng];
+          markerRef.current.setLatLng(point);
+          circleRef.current.setLatLng(point);
+          circleRef.current.setRadius(Math.max(1, Number(form.radius_meter) || 100));
+        }
+      }, [form.latitude, form.longitude, form.radius_meter, showModal]);
+
+      const useDeviceLocation = () => {
+        if (!navigator.geolocation) {
+          showToast('Perangkat ini tidak mendukung akses lokasi.');
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords;
+            updateCoordinates(latitude, longitude);
+            if (mapRef.current) mapRef.current.setView([latitude, longitude], 17);
+            if (markerRef.current) markerRef.current.setLatLng([latitude, longitude]);
+            if (circleRef.current) circleRef.current.setLatLng([latitude, longitude]);
+            showToast('Lokasi perangkat berhasil diambil.');
+          },
+          (error) => {
+            const message = error.code === 1 ? 'Izin lokasi ditolak. Izinkan akses lokasi di browser.' : error.code === 2 ? 'Lokasi perangkat tidak tersedia.' : 'Permintaan lokasi terlalu lama. Coba lagi.';
+            showToast(message);
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+      };
+
       const handleSave = (e) => {
         e.preventDefault();
-        const payload = { ...form, latitude: parseFloat(form.latitude), longitude: parseFloat(form.longitude), radius_meter: parseInt(form.radius_meter) };
+        const latitude = Number(form.latitude);
+        const longitude = Number(form.longitude);
+        const radius = Number.parseInt(form.radius_meter, 10);
+        if (form.latitude === '' || form.longitude === '' || !Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+          showToast('Tentukan latitude dan longitude yang valid melalui peta atau isi manual.');
+          return;
+        }
+        if (!Number.isFinite(radius) || radius <= 0) {
+          showToast('Radius harus lebih besar dari 0 meter.');
+          return;
+        }
+        const payload = { ...form, latitude, longitude, radius_meter: radius };
         if(editingId) setLokasiList(lokasiList.map(item => item.id === editingId ? { ...item, ...payload } : item));
         else setLokasiList([...lokasiList, { id: 'lok-'+Date.now(), ...payload }]);
         setShowModal(false); showToast(editingId ? 'Lokasi diperbarui!' : 'Lokasi ditambahkan!');
@@ -6257,14 +6388,32 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
             </table>
           </div>
           {showModal && (
-            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-[2rem] max-w-sm w-full p-6 shadow-2xl border border-slate-100">
-                 <h3 className="font-display font-bold text-lg text-slate-800 mb-4">{editingId ? 'Edit Lokasi' : 'Tambah Lokasi'}</h3>
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+              <div className="bg-white rounded-[2rem] max-w-xl w-full max-h-[94vh] overflow-y-auto p-5 sm:p-6 shadow-2xl border border-slate-100">
+                 <h3 className="font-display font-bold text-lg text-slate-800 mb-1">{editingId ? 'Edit Lokasi' : 'Tambah Lokasi'}</h3>
+                 <p className="text-xs text-slate-500 mb-4">Klik peta atau geser pin untuk menentukan titik lokasi.</p>
                  <form onSubmit={handleSave} className="space-y-3">
                    <input type="text" placeholder="Nama Lokasi (Gudang/Kantor)" value={form.nama_lokasi} onChange={e=>setForm({...form, nama_lokasi:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none" required />
-                   <input type="number" step="any" placeholder="Latitude (-6.xxx)" value={form.latitude} onChange={e=>setForm({...form, latitude:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" required />
-                   <input type="number" step="any" placeholder="Longitude (107.xxx)" value={form.longitude} onChange={e=>setForm({...form, longitude:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" required />
-                   <input type="number" placeholder="Radius (Meter)" value={form.radius_meter} onChange={e=>setForm({...form, radius_meter:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" required />
+                   <div className="flex flex-wrap items-center justify-between gap-2">
+                     <span className="text-[11px] font-bold text-slate-600"><i className="fa-solid fa-map-location-dot mr-1 text-pink-500"></i> Pilih titik di peta</span>
+                     <button type="button" onClick={useDeviceLocation} className="px-3 py-2 rounded-full bg-pink-50 hover:bg-pink-100 text-pink-700 text-[11px] font-bold"><i className="fa-solid fa-location-crosshairs mr-1"></i> Gunakan lokasi perangkat</button>
+                   </div>
+                   <div ref={mapContainerRef} className="w-full h-64 sm:h-72 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100" aria-label="Peta pemilih lokasi"></div>
+                   <p className="text-[10px] leading-relaxed text-slate-400">Peta menggunakan OpenStreetMap. Jika memilih lokasi perangkat, browser akan meminta izin akses lokasi dan umumnya memerlukan koneksi HTTPS.</p>
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                     <div>
+                       <label className="block text-[10px] font-bold text-slate-500 mb-1">Latitude</label>
+                       <input type="number" step="any" placeholder="Latitude (-6.xxx)" value={form.latitude} onChange={e=>setForm({...form, latitude:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" required />
+                     </div>
+                     <div>
+                       <label className="block text-[10px] font-bold text-slate-500 mb-1">Longitude</label>
+                       <input type="number" step="any" placeholder="Longitude (107.xxx)" value={form.longitude} onChange={e=>setForm({...form, longitude:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" required />
+                     </div>
+                   </div>
+                   <div>
+                     <label className="block text-[10px] font-bold text-slate-500 mb-1">Radius (meter)</label>
+                     <input type="number" min="1" step="1" placeholder="Radius (Meter)" value={form.radius_meter} onChange={e=>setForm({...form, radius_meter:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none font-mono-numbers" required />
+                   </div>
                    <div className="flex gap-2 pt-2">
                      <button type="button" onClick={()=>setShowModal(false)} className="w-1/3 py-3.5 bg-slate-100 text-slate-600 rounded-full font-bold text-xs">Batal</button>
                      <button type="submit" className="w-2/3 py-3.5 bg-slate-900 text-white rounded-full font-bold text-xs shadow-md">Simpan</button>
@@ -6323,6 +6472,22 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
         const hours = Number(match[1]);
         const minutes = Number(match[2]);
         return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+      };
+
+      // Estimasi jam kerja dihitung dari rentang jam masuk hingga jam pulang.
+      // Waktu istirahat tetap masuk hitungan; sisa menit diabaikan, bukan dibulatkan ke atas.
+      // Jika jam pulang lebih awal dari jam masuk, dianggap melewati tengah malam.
+      const getShiftWorkHours = (jamMasuk, jamPulang) => {
+        const toMinutes = (value) => {
+          const match = String(value || '').match(/^(\d{1,2}):(\d{2})/);
+          return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+        };
+        const masuk = toMinutes(jamMasuk);
+        const pulang = toMinutes(jamPulang);
+        if (masuk === null || pulang === null) return '—';
+        let rentangMenit = pulang - masuk;
+        if (rentangMenit < 0) rentangMenit += 24 * 60;
+        return `${Math.floor(rentangMenit / 60)} jam`;
       };
 
       const handleSave = (e) => {
@@ -6413,6 +6578,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                   <th className="p-4">Nama Shift</th>
                   <th className="p-4">Jam Masuk</th>
                   <th className="p-4">Jam Pulang</th>
+                  <th className="p-4 text-center">Jam Kerja</th>
                   <th className="p-4 text-center">Aksi</th>
                 </tr>
               </thead>
@@ -6421,8 +6587,14 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                   <tr key={item.id} className="hover:bg-slate-50/50">
                     <td className="p-4 text-center font-mono-numbers text-slate-400 font-bold">{i+1}</td>
                     <td className="p-4 font-bold text-slate-800">{item.nama_shift}</td>
-                    <td className="p-4 font-mono-numbers text-emerald-600 font-bold">{item.jam_masuk} WIB</td>
-                    <td className="p-4 font-mono-numbers text-rose-600 font-bold">{item.jam_pulang} WIB</td>
+                    <td className="p-4 font-mono-numbers text-emerald-600 font-bold">{formatShiftTimeDisplay(item.jam_masuk)} WIB</td>
+                    <td className="p-4 font-mono-numbers text-rose-600 font-bold">{formatShiftTimeDisplay(item.jam_pulang)} WIB</td>
+                    <td className="p-4 text-center">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-50 text-violet-700 font-bold whitespace-nowrap">
+                        <i className="fa-solid fa-hourglass-half text-[10px]"></i>
+                        {getShiftWorkHours(item.jam_masuk, item.jam_pulang)}
+                      </span>
+                    </td>
                     <td className="p-4 text-center">
                       <button onClick={()=>openModal(item)} className="w-8 h-8 rounded-full bg-slate-50 text-indigo-500 hover:bg-indigo-50 mx-1">
                         <i className="fa-solid fa-pen-to-square"></i>
@@ -6436,6 +6608,9 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
               </tbody>
             </table>
           </div>
+          <p className="text-[11px] text-slate-400 px-2 -mt-3">
+            Keterangan jam kerja dihitung otomatis dari jam masuk hingga jam pulang, termasuk waktu istirahat. Sisa menit tidak dibulatkan ke atas (contoh 07:45–16:00 = 8 jam).
+          </p>
 
           {showModal && (
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -6658,27 +6833,52 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
     function MasterJabatanView({ jabatanList, setJabatanList, divisiList, showToast }) {
       const [showModal, setShowModal] = useState(false);
       const [editingId, setEditingId] = useState(null);
-      const [form, setForm] = useState({ nama_jabatan: '', divisi: divisiList[0]?.nama_divisi || '' });
+      const [form, setForm] = useState({ nama_jabatan: '', divisi: divisiList[0]?.nama_divisi ? [divisiList[0].nama_divisi] : [] });
 
-      const sortedList = [...jabatanList].sort((a, b) => a.nama_jabatan.localeCompare(b.nama_jabatan));
+      const sortedList = [...jabatanList].sort((a, b) => (a.nama_jabatan || '').localeCompare(b.nama_jabatan || ''));
+      const getDivisions = (value) => Array.isArray(value)
+        ? value.filter(Boolean)
+        : String(value || '').split('|').map(v => v.trim()).filter(Boolean);
 
       const openModal = (item = null) => {
-        if(item) {
+        if (item) {
           setEditingId(item.id);
-          setForm({ nama_jabatan: item.nama_jabatan, divisi: item.divisi });
+          setForm({ nama_jabatan: item.nama_jabatan || '', divisi: getDivisions(item.divisi) });
         } else {
           setEditingId(null);
-          setForm({ nama_jabatan: '', divisi: divisiList[0]?.nama_divisi || '' });
+          setForm({ nama_jabatan: '', divisi: divisiList[0]?.nama_divisi ? [divisiList[0].nama_divisi] : [] });
         }
         setShowModal(true);
       };
 
+      const toggleDivision = (division, checked) => {
+        setForm(prev => ({
+          ...prev,
+          divisi: checked
+            ? [...new Set([...getDivisions(prev.divisi), division])]
+            : getDivisions(prev.divisi).filter(value => value !== division)
+        }));
+      };
+
       const handleSave = (e) => {
         e.preventDefault();
-        if(editingId) {
-          setJabatanList(jabatanList.map(item => item.id === editingId ? { ...item, ...form } : item));
+        const namaJabatan = String(form.nama_jabatan || '').trim();
+        const divisiTerpilih = getDivisions(form.divisi);
+        if (!namaJabatan) {
+          showToast('Nama jabatan wajib diisi.', 'error');
+          return;
+        }
+        if (!divisiTerpilih.length) {
+          showToast('Pilih minimal satu divisi.', 'error');
+          return;
+        }
+        // Simpan daftar divisi pada kolom `divisi` yang sudah ada, dipisahkan dengan `|`.
+        // Ini menghindari kebutuhan menambah kolom/tabel baru di Supabase.
+        const payload = { nama_jabatan: namaJabatan, divisi: divisiTerpilih.join('|') };
+        if (editingId) {
+          setJabatanList(jabatanList.map(item => item.id === editingId ? { ...item, ...payload } : item));
         } else {
-          setJabatanList([...jabatanList, { id: 'jab-' + Date.now(), ...form }]);
+          setJabatanList([...jabatanList, { id: 'jab-' + Date.now(), ...payload }]);
         }
         setShowModal(false);
         showToast(editingId ? 'Jabatan diperbarui!' : 'Jabatan ditambahkan!');
@@ -6689,7 +6889,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
           <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
             <div>
               <h2 className="font-display font-bold text-xl text-slate-800">Master Jabatan</h2>
-              <p className="text-xs text-slate-400 font-medium mt-1">Kelola posisi & sub-divisi peran kerja karyawan</p>
+              <p className="text-xs text-slate-400 font-medium mt-1">Kelola jabatan dan hubungkan ke satu atau beberapa divisi</p>
             </div>
             <button onClick={() => openModal()} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-bold shadow-md active:scale-95 transition">
               <i className="fa-solid fa-plus mr-2"></i> Tambah Jabatan
@@ -6702,7 +6902,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                 <tr className="bg-slate-50 text-slate-400 uppercase font-bold border-b border-slate-100 text-[10px] tracking-wider">
                   <th className="p-4 text-center">No</th>
                   <th className="p-4">Nama Jabatan</th>
-                  <th className="p-4">Divisi Induk</th>
+                  <th className="p-4">Divisi Terkait</th>
                   <th className="p-4 text-center">Aksi</th>
                 </tr>
               </thead>
@@ -6712,23 +6912,23 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                     <td className="p-4 text-center font-mono-numbers text-slate-400 font-bold">{i+1}</td>
                     <td className="p-4 font-bold text-slate-800">{item.nama_jabatan}</td>
                     <td className="p-4">
-                      <span className="px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 text-[10px] font-bold">
-                        {item.divisi}
-                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {getDivisions(item.divisi).map(division => (
+                          <span key={division} className="px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 text-[10px] font-bold">{division}</span>
+                        ))}
+                      </div>
                     </td>
                     <td className="p-4 text-center">
-                      <button onClick={()=>openModal(item)} className="w-8 h-8 rounded-full bg-slate-50 text-indigo-500 hover:bg-indigo-50 mx-1">
+                      <button onClick={() => openModal(item)} className="w-8 h-8 rounded-full bg-slate-50 text-indigo-500 hover:bg-indigo-50 mx-1" title="Edit jabatan">
                         <i className="fa-solid fa-pen-to-square"></i>
                       </button>
-                      <button onClick={()=>{setJabatanList(jabatanList.filter(x=>x.id!==item.id)); showToast('Jabatan dihapus')}} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1">
+                      <button onClick={() => { setJabatanList(jabatanList.filter(x => x.id !== item.id)); showToast('Jabatan dihapus'); }} className="w-8 h-8 rounded-full bg-slate-50 text-rose-500 hover:bg-rose-50 mx-1" title="Hapus jabatan">
                         <i className="fa-solid fa-trash"></i>
                       </button>
                     </td>
                   </tr>
                 )) : (
-                  <tr>
-                    <td colSpan="4" className="p-8 text-center text-slate-400">Belum ada data jabatan. Klik "Tambah Jabatan" di atas.</td>
-                  </tr>
+                  <tr><td colSpan="4" className="p-8 text-center text-slate-400">Belum ada data jabatan. Klik "Tambah Jabatan" di atas.</td></tr>
                 )}
               </tbody>
             </table>
@@ -6736,28 +6936,40 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
 
           {showModal && (
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-[2rem] max-w-sm w-full p-6 shadow-2xl border border-slate-100">
-                 <h3 className="font-display font-bold text-lg text-slate-800 mb-4">{editingId ? 'Edit Jabatan' : 'Tambah Jabatan'}</h3>
-                 <form onSubmit={handleSave} className="space-y-3">
-                   <div>
-                     <label className="text-[10px] font-bold text-slate-400 block mb-1">Nama Posisi / Jabatan</label>
-                     <input type="text" placeholder="Contoh: Store Supervisor / Staf Gudang" value={form.nama_jabatan} onChange={e=>setForm({...form, nama_jabatan:e.target.value})} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none" required />
-                   </div>
+              <div className="bg-white rounded-[2rem] max-w-md w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+                <h3 className="font-display font-bold text-lg text-slate-800 mb-4">{editingId ? 'Edit Jabatan' : 'Tambah Jabatan'}</h3>
+                <form onSubmit={handleSave} className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 block mb-1.5">Nama Posisi / Jabatan</label>
+                    <input type="text" placeholder="Contoh: Supervisor / Staf Gudang" value={form.nama_jabatan} onChange={e => setForm({ ...form, nama_jabatan: e.target.value })} className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none focus:border-violet-400" required />
+                  </div>
 
-                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
-                     <label className="text-[10px] font-bold text-slate-400 block mb-1.5">Divisi Induk</label>
-                     <select value={form.divisi} onChange={e=>setForm({...form, divisi:e.target.value})} className="w-full bg-white border border-slate-200 text-xs rounded-xl p-2 font-bold text-slate-700 outline-none">
-                       {divisiList.map(d => (
-                         <option key={d.id} value={d.nama_divisi}>{d.nama_divisi}</option>
-                       ))}
-                     </select>
-                   </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <label className="text-[10px] font-bold text-slate-500">Hubungkan ke Divisi</label>
+                      <span className="text-[10px] font-extrabold text-violet-600">{getDivisions(form.divisi).length} dipilih</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mb-3">Pilih satu atau beberapa divisi untuk jabatan ini.</p>
+                    <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                      {divisiList.map(d => {
+                        const checked = getDivisions(form.divisi).includes(d.nama_divisi);
+                        return (
+                          <label key={d.id || d.nama_divisi} className={`flex items-center gap-3 rounded-xl p-3 cursor-pointer border transition ${checked ? 'bg-violet-50 border-violet-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                            <input type="checkbox" checked={checked} onChange={e => toggleDivision(d.nama_divisi, e.target.checked)} className="w-4 h-4 accent-violet-600" />
+                            <span className="text-xs font-bold text-slate-700 flex-1">{d.nama_divisi}</span>
+                            {checked && <i className="fa-solid fa-check text-violet-600 text-xs"></i>}
+                          </label>
+                        );
+                      })}
+                      {divisiList.length === 0 && <p className="text-xs text-slate-400 p-3 text-center">Belum ada divisi. Tambahkan divisi terlebih dahulu.</p>}
+                    </div>
+                  </div>
 
-                   <div className="flex gap-2 pt-2">
-                     <button type="button" onClick={()=>setShowModal(false)} className="w-1/3 py-3.5 bg-slate-100 text-slate-600 rounded-full font-bold text-xs">Batal</button>
-                     <button type="submit" className="w-2/3 py-3.5 bg-slate-900 text-white rounded-full font-bold text-xs shadow-md">Simpan</button>
-                   </div>
-                 </form>
+                  <div className="flex gap-2 pt-1">
+                    <button type="button" onClick={() => setShowModal(false)} className="w-1/3 py-3.5 bg-slate-100 text-slate-600 rounded-full font-bold text-xs">Batal</button>
+                    <button type="submit" className="w-2/3 py-3.5 bg-slate-900 text-white rounded-full font-bold text-xs shadow-md">Simpan Jabatan</button>
+                  </div>
+                </form>
               </div>
             </div>
           )}
@@ -6765,9 +6977,6 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
       );
     }
 
-    /* =========================================================
-       MODUL MASTER ADMIN HRD
-       ========================================================= */
     function MasterAdminView({ adminList, setAdminList, showToast }) {
       const [showModal, setShowModal] = useState(false);
       const [editingId, setEditingId] = useState(null);
@@ -6776,10 +6985,9 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
         username: '',
         password: '',
         email: '',
-        role: 'Staf HRD'
+        role: encodeAdminMenuAccess(ADMIN_MENU_ALL),
+        menuAccess: [...ADMIN_MENU_ALL]
       });
-
-      const roles = ['Super Administrator', 'Staf HRD', 'Manajer Operasional', 'Admin Payroll'];
 
       const openModal = (item = null) => {
         if (item) {
@@ -6789,7 +6997,8 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
             username: item.username,
             password: item.password || '',
             email: item.email || '',
-            role: item.role || 'Staf HRD'
+            role: item.role || encodeAdminMenuAccess(ADMIN_MENU_ALL),
+            menuAccess: decodeAdminMenuAccess(item.role)
           });
         } else {
           setEditingId(null);
@@ -6798,7 +7007,8 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
             username: '',
             password: '',
             email: '',
-            role: 'Staf HRD'
+            role: encodeAdminMenuAccess(ADMIN_MENU_ALL),
+            menuAccess: [...ADMIN_MENU_ALL]
           });
         }
         setShowModal(true);
@@ -6811,14 +7021,27 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
           return;
         }
 
+        const payload = {
+          nama_lengkap: form.nama_lengkap.trim(),
+          username: form.username.trim(),
+          password: form.password,
+          email: form.email.trim(),
+          // Simpan daftar hak akses di kolom role yang sudah ada agar tidak perlu mengubah skema Supabase.
+          role: encodeAdminMenuAccess(form.menuAccess)
+        };
+        if (!payload.menuAccess && form.menuAccess.length === 0) {
+          showToast('Pilih minimal satu menu untuk akun administrator.', 'error');
+          return;
+        }
+        if (form.menuAccess.length === 0) {
+          showToast('Pilih minimal satu menu untuk akun administrator.', 'error');
+          return;
+        }
         if (editingId) {
-          setAdminList(prev => prev.map(a => a.id === editingId ? { ...a, ...form } : a));
-          showToast('Data administrator berhasil diperbarui!');
+          setAdminList(prev => prev.map(a => a.id === editingId ? { ...a, ...payload } : a));
+          showToast('Data administrator dan hak akses menu berhasil diperbarui!');
         } else {
-          const newAdmin = {
-            id: 'adm-' + Date.now(),
-            ...form
-          };
+          const newAdmin = { id: 'adm-' + Date.now(), ...payload };
           setAdminList([...adminList, newAdmin]);
           showToast('Admin baru berhasil ditambahkan!');
         }
@@ -6844,8 +7067,8 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                 <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-violet-600">Access Management</span>
               </div>
-              <h2 className="font-display font-bold text-xl text-slate-800 mt-1">Master Admin HR</h2>
-              <p className="text-xs text-slate-400 font-medium">Kelola akun dan hak akses administrator sistem</p>
+              <h2 className="font-display font-bold text-xl text-slate-800 mt-1">Master User</h2>
+              <p className="text-xs text-slate-400 font-medium">Kelola akun administrator dan pilih menu panel yang dapat diakses</p>
             </div>
             <button 
               onClick={() => openModal()} 
@@ -6861,10 +7084,10 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
               <thead>
                 <tr className="bg-slate-50 text-slate-400 uppercase font-bold border-b border-slate-100 text-[10px] tracking-wider">
                   <th className="p-4 text-center">No</th>
-                  <th className="p-4">Nama Lengkap</th>
+                  <th className="p-4">Divisi</th>
                   <th className="p-4">Username</th>
                   <th className="p-4">Email</th>
-                  <th className="p-4">Role / Peran</th>
+                  <th className="p-4">Hak Akses Menu</th>
                   <th className="p-4 text-center">Aksi</th>
                 </tr>
               </thead>
@@ -6878,13 +7101,9 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                     <td className="p-4 font-mono-numbers text-slate-600 font-bold">{a.username}</td>
                     <td className="p-4 text-slate-500">{a.email || '-'}</td>
                     <td className="p-4">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                        a.role === 'Super Administrator' 
-                          ? 'bg-violet-50 text-violet-700 border border-violet-100' 
-                          : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                      }`}>
-                        {a.role}
-                      </span>
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {getAdminMenuLabels(a.role).map(label => <span key={label} className="px-2 py-1 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">{label}</span>)}
+                      </div>
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center space-x-1">
@@ -6923,10 +7142,10 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                 </div>
                 <form onSubmit={handleSave} className="space-y-3">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 block mb-1">Nama Lengkap</label>
+                    <label className="text-[10px] font-bold text-slate-400 block mb-1">Divisi</label>
                     <input 
                       type="text" 
-                      placeholder="Nama Lengkap Administrator" 
+                      placeholder="Contoh: HRD" 
                       value={form.nama_lengkap} 
                       onChange={e => setForm({ ...form, nama_lengkap: e.target.value })} 
                       className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold outline-none focus:border-violet-500" 
@@ -6966,17 +7185,22 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                       required 
                     />
                   </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 block mb-1">Peran / Role</label>
-                    <select 
-                      value={form.role} 
-                      onChange={e => setForm({ ...form, role: e.target.value })} 
-                      className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold text-slate-700 outline-none"
-                    >
-                      {roles.map(r => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
-                    </select>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <label className="text-xs font-extrabold text-slate-700">Hak Akses Menu Panel Admin</label>
+                      <span className="text-[10px] font-extrabold text-violet-600">{form.menuAccess.length} dipilih</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mb-3">Centang menu yang boleh dilihat akun ini setelah login. Pilihan bisa lebih dari satu.</p>
+                    <div className="space-y-2">
+                      {ADMIN_MENU_OPTIONS.map(item => {
+                        const checked = form.menuAccess.includes(item.id);
+                        return <label key={item.id} className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition ${checked ? 'bg-violet-50 border-violet-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                          <input type="checkbox" checked={checked} onChange={e => setForm(prev => ({ ...prev, menuAccess: e.target.checked ? [...prev.menuAccess, item.id] : prev.menuAccess.filter(id => id !== item.id) }))} className="w-4 h-4 accent-violet-600" />
+                          <span className="text-xs font-bold text-slate-700 flex-1">{item.label}</span>
+                          {checked && <i className="fa-solid fa-check text-violet-600 text-xs"></i>}
+                        </label>;
+                      })}
+                    </div>
                   </div>
                   <div className="flex gap-2 pt-2">
                     <button 
@@ -7004,50 +7228,35 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
     /* =========================================================
        MODUL MASTER PENGUMUMAN HRD
        ========================================================= */
-    function MasterPengumumanView({ pengumumanList, setPengumumanList, showToast }) {
+    function MasterPengumumanView({ pengumumanList, setPengumumanList, showToast, currentUser }) {
       const [searchQuery, setSearchQuery] = useState('');
-      const [filterKategori, setFilterKategori] = useState('Semua');
       const [showModal, setShowModal] = useState(false);
       const [editingId, setEditingId] = useState(null);
       const [previewItem, setPreviewItem] = useState(null);
-
-      const [form, setForm] = useState({
-        judul: '',
-        kategori: 'Informasi Umum',
-        isi: '',
-        author: 'HRD Suryatokoku'
-      });
-
-      const kategoriOptions = ['Payroll', 'Operasional', 'Hari Libur', 'Informasi Umum', 'Kebijakan Perusahaan'];
+      const currentDivision = String(currentUser?.divisi || currentUser?.nama_lengkap || '').trim() || 'HRD';
+      const [form, setForm] = useState({ judul: '', isi: '', author: currentDivision });
 
       const filteredList = useMemo(() => {
         return pengumumanList.filter(item => {
-          const matchKategori = filterKategori === 'Semua' || (item.kategori || 'Informasi Umum') === filterKategori;
           const matchSearch = !searchQuery.trim() ||
-            item.judul.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.isi.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (item.author && item.author.toLowerCase().includes(searchQuery.toLowerCase()));
-          return matchKategori && matchSearch;
+            String(item.judul || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            String(item.isi || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            String(item.author || '').toLowerCase().includes(searchQuery.toLowerCase());
+          return matchSearch;
         });
-      }, [pengumumanList, filterKategori, searchQuery]);
+      }, [pengumumanList, searchQuery]);
 
       const openModal = (item = null) => {
         if (item) {
           setEditingId(item.id);
           setForm({
-            judul: item.judul,
-            kategori: item.kategori || 'Informasi Umum',
-            isi: item.isi,
-            author: item.author || 'HRD Suryatokoku'
+            judul: item.judul || '',
+            isi: item.isi || '',
+            author: item.author || currentDivision
           });
         } else {
           setEditingId(null);
-          setForm({
-            judul: '',
-            kategori: 'Informasi Umum',
-            isi: '',
-            author: 'HRD Suryatokoku'
-          });
+          setForm({ judul: '', isi: '', author: currentDivision });
         }
         setShowModal(true);
       };
@@ -7060,12 +7269,15 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
         }
 
         if (editingId) {
-          setPengumumanList(prev => prev.map(p => p.id === editingId ? { ...p, ...form } : p));
+          setPengumumanList(prev => prev.map(p => p.id === editingId ? { ...p, judul: form.judul.trim(), isi: form.isi.trim(), author: p.author || form.author } : p));
           showToast('Pengumuman berhasil diperbarui!');
         } else {
           const newItem = {
             id: 'pgm-' + Date.now(),
-            ...form,
+            judul: form.judul.trim(),
+            isi: form.isi.trim(),
+            author: currentDivision,
+            kategori: 'Informasi Umum', // nilai kompatibilitas internal; kategori tidak ditampilkan di antarmuka
             created_at: new Date().toISOString()
           };
           setPengumumanList([newItem, ...pengumumanList]);
@@ -7081,15 +7293,6 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
         }
       };
 
-      const getKategoriBadgeColor = (kategori) => {
-        switch (kategori) {
-          case 'Payroll': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-          case 'Operasional': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
-          case 'Hari Libur': return 'bg-sky-50 text-sky-700 border-sky-200';
-          case 'Kebijakan Perusahaan': return 'bg-rose-50 text-rose-700 border-rose-200';
-          default: return 'bg-violet-50 text-violet-700 border-violet-200';
-        }
-      };
 
       return (
         <div className="space-y-6">
@@ -7132,22 +7335,6 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
               </div>
             </div>
 
-            {/* Filter Kategori Chips */}
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {['Semua', ...kategoriOptions].map(kat => (
-                <button
-                  key={kat}
-                  onClick={() => setFilterKategori(kat)}
-                  className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition shadow-sm ${
-                    filterKategori === kat
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-50 text-slate-600 border border-slate-100 hover:bg-white'
-                  }`}
-                >
-                  {kat}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Tabel Pengumuman */}
@@ -7157,7 +7344,6 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                 <thead>
                   <tr className="bg-slate-50 text-slate-400 uppercase font-bold border-b border-slate-100 text-[10px] tracking-wider">
                     <th className="p-4 text-center">No</th>
-                    <th className="p-4">Kategori</th>
                     <th className="p-4">Judul Pengumuman</th>
                     <th className="p-4">Ringkasan Pesan</th>
                     <th className="p-4">Penulis</th>
@@ -7170,11 +7356,6 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                     filteredList.map((item, idx) => (
                       <tr key={item.id} className="hover:bg-fuchsia-50/20 transition">
                         <td className="p-4 text-center font-mono-numbers text-slate-400 font-bold">{idx + 1}</td>
-                        <td className="p-4">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${getKategoriBadgeColor(item.kategori || 'Informasi Umum')}`}>
-                            {item.kategori || 'Informasi Umum'}
-                          </span>
-                        </td>
                         <td className="p-4 max-w-xs">
                           <span 
                             onClick={() => setPreviewItem(item)}
@@ -7224,7 +7405,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="p-8 text-center text-slate-400 font-medium">
+                      <td colSpan="6" className="p-8 text-center text-slate-400 font-medium">
                         Tidak ditemukan pengumuman dengan kata kunci tersebut.
                       </td>
                     </tr>
@@ -7261,31 +7442,16 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 block mb-1">Kategori / Tag</label>
-                      <select 
-                        value={form.kategori}
-                        onChange={(e) => setForm({ ...form, kategori: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold text-slate-700 outline-none"
-                      >
-                        {kategoriOptions.map(k => (
-                          <option key={k} value={k}>{k}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 block mb-1">Penerbit / Penulis</label>
-                      <input 
-                        type="text" 
-                        placeholder="Contoh: HRD Suryatokoku"
-                        value={form.author}
-                        onChange={(e) => setForm({ ...form, author: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs rounded-2xl p-3 font-bold text-slate-700 outline-none"
-                        required
-                      />
-                    </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 block mb-1">Penerbit / Penulis</label>
+                    <input
+                      type="text"
+                      value={editingId ? (form.author || currentDivision) : currentDivision}
+                      readOnly
+                      aria-readonly="true"
+                      className="w-full bg-slate-100 border border-slate-200 text-xs rounded-2xl p-3 font-bold text-slate-500 outline-none cursor-not-allowed"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Terisi otomatis berdasarkan Divisi akun administrator yang login dan tidak dapat diedit.</p>
                   </div>
 
                   <div>
@@ -7330,10 +7496,7 @@ ${uploadError.message || 'Silakan coba lagi.'}`);
                 onClick={e => e.stopPropagation()}
                 className="bg-white rounded-[2rem] max-w-md w-full p-6 shadow-2xl border border-slate-100"
               >
-                <div className="flex justify-between items-center mb-3">
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${getKategoriBadgeColor(previewItem.kategori || 'Informasi Umum')}`}>
-                    {previewItem.kategori || 'Informasi Umum'}
-                  </span>
+                <div className="flex items-center justify-end mb-3">
                   <button 
                     onClick={() => setPreviewItem(null)}
                     className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center"
